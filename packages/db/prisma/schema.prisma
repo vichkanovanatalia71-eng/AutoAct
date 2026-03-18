@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  passwordHash     String         @map("password_hash")
+  salt             String
+  stripeCustomerId String?        @map("stripe_customer_id")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  workflows    UserWorkflow[]
+  credentials  Credential[]
+  subscription Subscription?
+
+  @@map("users")
+}
+
+model WorkflowTemplate {
+  id                  String   @id @default(uuid())
+  name                String
+  description         String?
+  category            String
+  tags                String[]
+  definition          Json
+  requiredCredentials String[] @map("required_credentials")
+  triggerType         String   @map("trigger_type")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  userWorkflows UserWorkflow[]
+
+  @@index([category])
+  @@index([triggerType])
+  @@map("workflow_templates")
+}
+
+model UserWorkflow {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  templateId       String   @map("template_id")
+  status           String   @default("active")
+  credentialMapping Json     @map("credential_mapping")
+  triggerConfig    Json?    @map("trigger_config")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template   WorkflowTemplate  @relation(fields: [templateId], references: [id])
+  executions Execution[]
+
+  @@index([userId])
+  @@map("user_workflows")
+}
+
+model Credential {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  serviceType   String   @map("service_type")
+  name          String
+  encryptedData String   @map("encrypted_data")
+  iv            String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("credentials")
+}
+
+model Execution {
+  id             String    @id @default(uuid())
+  userWorkflowId String    @map("user_workflow_id")
+  status         String    @default("pending")
+  logs           Json      @default("[]")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+
+  userWorkflow UserWorkflow @relation(fields: [userWorkflowId], references: [id], onDelete: Cascade)
+
+  @@index([userWorkflowId])
+  @@index([startedAt])
+  @@map("executions")
+}
+
+model Subscription {
+  id                   String   @id @default(uuid())
+  userId               String   @unique @map("user_id")
+  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  plan                 String   @default("free")
+  executionsLimit      Int      @default(100) @map("executions_limit")
+  periodEnd            DateTime? @map("period_end")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
