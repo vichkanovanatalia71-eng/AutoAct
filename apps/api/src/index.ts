@@ -12,6 +12,9 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { adminTemplateRoutes } from "./routes/admin-templates.js";
 import { adminSyncLogRoutes } from "./routes/admin-sync-logs.js";
 import { adminSettingsRoutes } from "./routes/admin-settings.js";
+import { adminRichTemplateRoutes } from "./routes/admin-rich-templates.js";
+import { publicViewRoutes } from "./routes/public-views.js";
+import { pdfProxyRoutes } from "./routes/pdf-proxy.js";
 
 const app = Fastify({ logger: true });
 
@@ -40,6 +43,9 @@ await app.register(webhookRoutes);
 await app.register(adminTemplateRoutes);
 await app.register(adminSyncLogRoutes);
 await app.register(adminSettingsRoutes);
+await app.register(adminRichTemplateRoutes);
+await app.register(publicViewRoutes);
+await app.register(pdfProxyRoutes);
 
 app.get("/health", async () => ({ status: "ok" }));
 

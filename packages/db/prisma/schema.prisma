@@ -60,6 +60,17 @@ model WorkflowTemplate {
   syncStatus          SyncStatus  @default(idle) @map("sync_status")
   syncError           String?     @map("sync_error")
 
+  // Rich card fields
+  coverImageUrl       String?     @map("cover_image_url")
+  diagramUrl          String?     @map("diagram_url")
+  author              String?
+  viewsCount          Int         @default(0) @map("views_count")
+  nodeCount           Int         @default(0) @map("node_count")
+  pdfAttachments      Json        @default("[]") @map("pdf_attachments")
+  videoAttachments    Json        @default("[]") @map("video_attachments")
+  cardLayout          Json?       @map("card_layout")
+  rawJson             Json?       @map("raw_json")
+
   userWorkflows UserWorkflow[]
   syncLogs      SyncLog[]
 

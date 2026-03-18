@@ -12,6 +12,11 @@ import {
   Play,
   CheckCircle2,
   AlertCircle,
+  Eye,
+  Calendar,
+  User,
+  Tag,
+  Layers,
 } from "lucide-react";
 import { getTemplate, getCredentials, createWorkflow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -25,12 +30,36 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { PdfViewer } from "@/components/PdfViewer";
+import { VideoPlayer } from "@/components/VideoPlayer";
+import { WorkflowDiagram } from "@/components/WorkflowDiagram";
 
 interface TemplateNode {
   id: string;
   type: string;
-  label: string;
+  label?: string;
   config?: Record<string, unknown>;
+  next?: string[];
+  next_true?: string[];
+  next_false?: string[];
+}
+
+interface PdfAttachment {
+  id: string;
+  title: string;
+  url: string;
+}
+
+interface VideoAttachment {
+  id: string;
+  title: string;
+  url: string;
+  source: "youtube" | "vimeo" | "upload";
+}
+
+interface CardLayoutSection {
+  type: string;
+  visible: boolean;
 }
 
 interface Template {
@@ -42,6 +71,13 @@ interface Template {
   triggerType: string;
   requiredCredentials: string[];
   nodes: TemplateNode[];
+  coverUrl?: string;
+  author?: string;
+  views?: number;
+  createdAt?: string;
+  pdfs?: PdfAttachment[];
+  videos?: VideoAttachment[];
+  cardLayout?: CardLayoutSection[];
 }
 
 interface Credential {
@@ -62,6 +98,8 @@ const triggerIcons: Record<string, typeof Zap> = {
   manual: Globe,
 };
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 export default function TemplateDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -79,6 +117,13 @@ export default function TemplateDetailPage() {
 
   const id = params.id as string;
 
+  // Track view
+  useEffect(() => {
+    fetch(`${API_URL}/templates/${id}/view`, { method: "POST" }).catch(
+      () => {}
+    );
+  }, [id]);
+
   useEffect(() => {
     async function load() {
       try {
@@ -87,15 +132,14 @@ export default function TemplateDetailPage() {
           user ? getCredentials() : Promise.resolve([]),
         ]);
         if (t.status === "fulfilled") {
-          const tmpl = t.value;
+          const tmpl = t.value as Record<string, unknown>;
           // Normalize: support both definition.nodes and top-level nodes
           const nodes =
-            tmpl.nodes ||
-            (tmpl as unknown as { definition?: { nodes?: TemplateNode[] } })
-              .definition?.nodes ||
+            (tmpl.nodes as TemplateNode[]) ||
+            (tmpl.definition as { nodes?: TemplateNode[] })?.nodes ||
             [];
-          setTemplate({ ...tmpl, nodes });
-          setWorkflowName(tmpl.name);
+          setTemplate({ ...(tmpl as unknown as Template), nodes });
+          setWorkflowName(tmpl.name as string);
         }
         if (c.status === "fulfilled")
           setCredentials(c.value as Credential[]);
@@ -118,7 +162,7 @@ export default function TemplateDetailPage() {
         name: workflowName,
         credentialMapping,
       });
-      router.push(`/workflows/${res.id}`);
+      router.push(`/workflows/${(res as { id: string }).id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Помилка активації");
     } finally {
@@ -126,8 +170,19 @@ export default function TemplateDetailPage() {
     }
   }
 
+  function isSectionVisible(sectionType: string): boolean {
+    if (!template?.cardLayout || template.cardLayout.length === 0) return true;
+    const section = template.cardLayout.find((s) => s.type === sectionType);
+    return section ? section.visible : true;
+  }
+
   if (loading) {
-    return <p className="py-20 text-center text-gray-500">Завантаження...</p>;
+    return (
+      <div className="py-20 text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+        <p className="mt-4 text-gray-500">Завантаження...</p>
+      </div>
+    );
   }
 
   if (!template) {
@@ -149,9 +204,21 @@ export default function TemplateDetailPage() {
   const credentialsByService = (service: string) =>
     credentials.filter(
       (c) =>
-        (c.service || (c as unknown as { serviceType?: string }).serviceType || "")
+        (
+          c.service ||
+          (c as unknown as { serviceType?: string }).serviceType ||
+          ""
+        )
           .toLowerCase() === service.toLowerCase()
     );
+
+  const formattedDate = template.createdAt
+    ? new Date(template.createdAt).toLocaleDateString("uk-UA", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <div>
@@ -163,9 +230,20 @@ export default function TemplateDetailPage() {
         Назад до каталогу
       </Link>
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Main content */}
-        <div className="lg:col-span-2">
+      {/* 1. Cover Image */}
+      {isSectionVisible("cover") && template.coverUrl && (
+        <div className="mb-8 overflow-hidden rounded-xl">
+          <img
+            src={template.coverUrl}
+            alt={template.name}
+            className="w-full h-[300px] object-cover"
+          />
+        </div>
+      )}
+
+      {/* 2. Header */}
+      {isSectionVisible("header") && (
+        <div className="mb-8">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">
               {template.name}
@@ -176,51 +254,85 @@ export default function TemplateDetailPage() {
           <div className="mt-3 flex flex-wrap gap-2">
             {template.tags.map((tag) => (
               <Badge key={tag} variant="secondary">
+                <Tag className="mr-1 h-3 w-3" />
                 {tag}
               </Badge>
             ))}
           </div>
 
-          <p className="mt-6 text-gray-700">{template.description}</p>
-
-          {/* Trigger info */}
-          <div className="mt-6 flex items-center gap-2 text-sm text-gray-600">
-            <TriggerIcon className="h-4 w-4" />
-            <span>
-              Тригер:{" "}
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-500">
+            {template.author && (
+              <span className="flex items-center gap-1">
+                <User className="h-4 w-4" />
+                {template.author}
+              </span>
+            )}
+            {typeof template.views === "number" && (
+              <span className="flex items-center gap-1">
+                <Eye className="h-4 w-4" />
+                {template.views} переглядів
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <TriggerIcon className="h-4 w-4" />
               {triggerLabels[template.triggerType] || template.triggerType}
             </span>
-          </div>
-
-          {/* Nodes / steps */}
-          <div className="mt-8">
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-              <Zap className="h-5 w-5" />
-              Кроки воркфлоу ({template.nodes.length})
-            </h2>
-            <div className="mt-4 space-y-3">
-              {template.nodes.map((node, idx) => (
-                <div
-                  key={node.id || idx}
-                  className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700">
-                    {idx + 1}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {node.label || node.type.replace(/_/g, " ")}
-                    </p>
-                    <p className="text-sm text-gray-500">{node.type}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {formattedDate && (
+              <span className="flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                {formattedDate}
+              </span>
+            )}
           </div>
         </div>
+      )}
 
-        {/* Sidebar */}
-        <div>
+      {/* 3. Description */}
+      {isSectionVisible("description") && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Опис</h2>
+          <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+            {template.description}
+          </p>
+        </div>
+      )}
+
+      {/* 4. Nodes & Credentials — two columns */}
+      {isSectionVisible("nodes_credentials") && (
+        <div className="mb-8 grid gap-6 md:grid-cols-2">
+          {/* Nodes list */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="h-5 w-5" />
+                Кроки воркфлоу ({template.nodes.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {template.nodes.length === 0 ? (
+                <p className="text-sm text-gray-500">Немає кроків</p>
+              ) : (
+                template.nodes.map((node, idx) => (
+                  <div
+                    key={node.id || idx}
+                    className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3"
+                  >
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700">
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {node.label || node.type.replace(/_/g, " ")}
+                      </p>
+                      <p className="text-xs text-gray-500">{node.type}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Required Credentials */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -263,24 +375,74 @@ export default function TemplateDetailPage() {
                   );
                 })
               )}
-              <div className="pt-2">
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    if (!user) {
-                      router.push("/auth/login");
-                      return;
-                    }
-                    setDialogOpen(true);
-                  }}
-                >
-                  <Play className="h-4 w-4" />
-                  Активувати воркфлоу
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* 5. Workflow Diagram */}
+      {isSectionVisible("diagram") && template.nodes.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">
+            Діаграма воркфлоу
+          </h2>
+          <WorkflowDiagram nodes={template.nodes} />
+        </div>
+      )}
+
+      {/* 6. PDF Attachments */}
+      {isSectionVisible("pdfs") &&
+        template.pdfs &&
+        template.pdfs.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">
+              PDF документи
+            </h2>
+            <div className="space-y-4">
+              {template.pdfs.map((pdf) => (
+                <PdfViewer key={pdf.id} url={pdf.url} title={pdf.title} />
+              ))}
+            </div>
+          </div>
+        )}
+
+      {/* 7. Video Attachments */}
+      {isSectionVisible("videos") &&
+        template.videos &&
+        template.videos.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">
+              Відео
+            </h2>
+            <div className="space-y-4">
+              {template.videos.map((video) => (
+                <VideoPlayer
+                  key={video.id}
+                  url={video.url}
+                  title={video.title}
+                  source={video.source}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+      {/* 8. Activate Button */}
+      <div className="mb-12">
+        <Button
+          size="lg"
+          className="w-full sm:w-auto"
+          onClick={() => {
+            if (!user) {
+              router.push("/auth/login");
+              return;
+            }
+            setDialogOpen(true);
+          }}
+        >
+          <Play className="h-4 w-4" />
+          Активувати воркфлоу
+        </Button>
       </div>
 
       {/* Activation dialog */}

@@ -18,7 +18,8 @@
     "bcryptjs": "^3.0.0",
     "bullmq": "^5.34.0",
     "stripe": "^17.5.0",
-    "fastify-plugin": "^5.0.0"
+    "fastify-plugin": "^5.0.0",
+    "@google/generative-ai": "^0.21.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

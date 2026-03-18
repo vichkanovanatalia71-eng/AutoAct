@@ -179,3 +179,106 @@ export async function updateAdminSettings(data: Partial<AdminSettings>) {
     body: JSON.stringify(data),
   });
 }
+
+// ---------- Rich Template Management ----------
+
+export async function createTemplateFromUrl(jsonUrl: string) {
+  return adminFetch<AdminTemplate>("/admin/templates/from-url", {
+    method: "POST",
+    body: JSON.stringify({ jsonUrl }),
+  });
+}
+
+export async function regenerateCover(id: string) {
+  return adminFetch<{ coverUrl: string }>(`/admin/templates/${id}/regenerate-cover`, {
+    method: "POST",
+  });
+}
+
+export async function regenerateDiagram(id: string) {
+  return adminFetch<{ diagramUrl: string }>(`/admin/templates/${id}/regenerate-diagram`, {
+    method: "POST",
+  });
+}
+
+// ---------- PDF Attachments ----------
+
+export async function addPdfUrl(id: string, title: string, url: string) {
+  return adminFetch<{ id: string; title: string; url: string }>(
+    `/admin/templates/${id}/pdfs`,
+    {
+      method: "POST",
+      body: JSON.stringify({ title, url }),
+    }
+  );
+}
+
+export async function removePdf(id: string, pdfId: string) {
+  return adminFetch(`/admin/templates/${id}/pdfs/${pdfId}`, {
+    method: "DELETE",
+  });
+}
+
+// ---------- Video Attachments ----------
+
+export async function addVideoUrl(id: string, title: string, url: string) {
+  return adminFetch<{ id: string; title: string; url: string; source: string }>(
+    `/admin/templates/${id}/videos`,
+    {
+      method: "POST",
+      body: JSON.stringify({ title, url }),
+    }
+  );
+}
+
+export async function removeVideo(id: string, videoId: string) {
+  return adminFetch(`/admin/templates/${id}/videos/${videoId}`, {
+    method: "DELETE",
+  });
+}
+
+// ---------- Card Layout ----------
+
+export async function updateCardLayout(
+  id: string,
+  layout: Array<{ type: string; visible: boolean; order?: number }>
+) {
+  return adminFetch<{ cardLayout: Array<{ type: string; visible: boolean; order?: number }> }>(
+    `/admin/templates/${id}/card-layout`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ layout }),
+    }
+  );
+}
+
+// ---------- Template Stats ----------
+
+export interface TemplateStatsResponse {
+  totalActivations: number;
+  activeNow: number;
+  totalExecutions: number;
+  successRate: number;
+  views: number;
+  conversionRate: number;
+}
+
+export interface ExecutionStatsResponse {
+  days: Array<{
+    date: string;
+    total: number;
+    success: number;
+    failed: number;
+  }>;
+}
+
+export async function getTemplateStats(id: string) {
+  return adminFetch<TemplateStatsResponse>(`/admin/templates/${id}/stats`);
+}
+
+export async function getTemplateExecutionStats(id: string, period?: string) {
+  const query = period ? `?period=${period}` : "";
+  return adminFetch<ExecutionStatsResponse>(
+    `/admin/templates/${id}/stats/executions${query}`
+  );
+}
