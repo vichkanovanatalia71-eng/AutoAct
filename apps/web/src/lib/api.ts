@@ -486,6 +486,90 @@ export async function getReferralInfo() {
   }>("/settings/referral");
 }
 
+// ---------- Dashboard ----------
+
+export async function getDashboard() {
+  return apiFetch<{
+    user: { email: string; plan: string };
+    planRenewalDate?: string;
+    usage: {
+      executionsUsed: number;
+      executionsLimit: number;
+      workflowsUsed: number;
+      workflowsLimit: number;
+      systemKeyCostCents: number;
+    };
+    stats: {
+      activeWorkflows: number;
+      executionsToday: number;
+      systemKeyCost: number;
+    };
+    needsAttention: Array<{
+      workflowId: string;
+      workflowName: string;
+      reason: string;
+    }>;
+    recentActivity: Array<{
+      id: string;
+      workflowName: string;
+      status: string;
+      duration?: number;
+      triggerType: string;
+      startedAt: string;
+      finishedAt?: string;
+    }>;
+  }>("/dashboard");
+}
+
+// ---------- Billing History ----------
+
+export async function getBillingHistory(page?: number) {
+  const qs = page ? `?page=${page}` : "";
+  return apiFetch<{
+    data: Array<{
+      id: string;
+      date: string;
+      amount: number;
+      status: string;
+      description: string;
+      invoiceUrl?: string;
+    }>;
+    total: number;
+    page: number;
+    totalPages: number;
+  }>(`/billing/history${qs}`);
+}
+
+// ---------- Sessions ----------
+
+export async function getSessions() {
+  return apiFetch<
+    Array<{
+      id: string;
+      device: string;
+      ip: string;
+      location?: string;
+      lastActive: string;
+      current: boolean;
+    }>
+  >("/settings/sessions");
+}
+
+export async function revokeSession(id: string) {
+  return apiFetch(`/settings/sessions/${id}`, { method: "DELETE" });
+}
+
+export async function revokeOtherSessions() {
+  return apiFetch("/settings/sessions/revoke-others", { method: "POST" });
+}
+
+export async function updateProfileExtended(data: { email?: string; timezone?: string; language?: string }) {
+  return apiFetch<{ id: string; email: string; timezone?: string; language?: string }>("/settings/profile", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // ---------- Notifications ----------
 
 export async function getNotifications(params?: { page?: number; unreadOnly?: boolean }) {

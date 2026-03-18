@@ -11,7 +11,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     { preHandler: [authenticate] },
     async (request, reply) => {
       const { userId } = request.user;
-      const { email } = request.body;
+      const { email, timezone, language } = request.body as UpdateProfileRequest & { timezone?: string; language?: string };
 
       if (email) {
         const existing = await app.prisma.user.findUnique({ where: { email } });
@@ -20,9 +20,21 @@ export async function settingsRoutes(app: FastifyInstance) {
         }
       }
 
+      const updateData: Record<string, unknown> = {};
+      if (email) {
+        updateData.email = email;
+        updateData.emailVerifiedAt = null;
+      }
+      if (timezone !== undefined) {
+        updateData.timezone = timezone;
+      }
+      if (language !== undefined) {
+        updateData.language = language;
+      }
+
       const user = await app.prisma.user.update({
         where: { id: userId },
-        data: { ...(email ? { email, emailVerifiedAt: null } : {}) },
+        data: updateData,
       });
 
       await createAuditLog({
@@ -33,7 +45,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         ipAddress: request.ip,
       });
 
-      return reply.send({ id: user.id, email: user.email });
+      return reply.send({ id: user.id, email: user.email, timezone: user.timezone, language: user.language });
     },
   );
 
@@ -200,4 +212,6 @@ export async function settingsRoutes(app: FastifyInstance) {
     const result = await getUserReferrals(request.user.userId);
     return reply.send(result);
   });
+
+  // Session management moved to routes/sessions.ts
 }

@@ -105,6 +105,10 @@ export async function authRoutes(app: FastifyInstance) {
         emailVerified: false,
         twoFactorEnabled: false,
         onboardingCompleted: false,
+        timezone: user.timezone,
+        language: user.language,
+        avatarUrl: user.avatarUrl,
+        biometricEnabled: user.biometricEnabled,
         createdAt: user.createdAt.toISOString(),
       },
     });
@@ -164,6 +168,10 @@ export async function authRoutes(app: FastifyInstance) {
         emailVerified: !!user.emailVerifiedAt,
         twoFactorEnabled: user.twoFactorEnabled,
         onboardingCompleted: user.onboardingCompleted,
+        timezone: user.timezone,
+        language: user.language,
+        avatarUrl: user.avatarUrl,
+        biometricEnabled: user.biometricEnabled,
         createdAt: user.createdAt.toISOString(),
       },
     });
@@ -188,6 +196,10 @@ export async function authRoutes(app: FastifyInstance) {
       emailVerified: !!user.emailVerifiedAt,
       twoFactorEnabled: user.twoFactorEnabled,
       onboardingCompleted: user.onboardingCompleted,
+      timezone: user.timezone,
+      language: user.language,
+      avatarUrl: user.avatarUrl,
+      biometricEnabled: user.biometricEnabled,
       createdAt: user.createdAt.toISOString(),
       notificationPrefs: user.notificationPrefs,
       subscription: user.subscription

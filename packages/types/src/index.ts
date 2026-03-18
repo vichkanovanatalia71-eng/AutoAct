@@ -112,6 +112,10 @@ export interface UserDTO {
   emailVerified: boolean;
   twoFactorEnabled: boolean;
   onboardingCompleted: boolean;
+  timezone: string;
+  language: string;
+  avatarUrl?: string;
+  biometricEnabled: boolean;
   createdAt: string;
 }
 
@@ -326,6 +330,8 @@ export interface TwoFactorVerifyRequest {
 
 export interface UpdateProfileRequest {
   email?: string;
+  timezone?: string;
+  language?: string;
 }
 
 export interface ChangePasswordRequest {
@@ -336,6 +342,10 @@ export interface ChangePasswordRequest {
 export interface NotificationPrefsRequest {
   email?: boolean;
   inApp?: boolean;
+  pushErrors?: boolean;
+  pushActions?: boolean;
+  pushExecutions?: boolean;
+  weeklyReport?: boolean;
 }
 
 // ============ User API Keys ============
@@ -428,6 +438,103 @@ export interface BillingUsageDTO {
   workflowsLimit: number;
   systemKeyCostCents: number;
   periodEnd?: string;
+  parallelLimit?: number;
+  maxExecutionTime?: number;
+  apiRateLimit?: number;
+  paymentMethod?: string;
+}
+
+export interface BillingInvoiceDTO {
+  id: string;
+  amount: number;
+  status: "paid" | "failed" | "pending";
+  description: string;
+  invoiceUrl?: string;
+  periodStart: string;
+  periodEnd: string;
+  createdAt: string;
+}
+
+// ============ Sessions ============
+
+export interface SessionDTO {
+  id: string;
+  deviceName?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  lastActiveAt: string;
+  isCurrent: boolean;
+  createdAt: string;
+}
+
+// ============ Push Tokens ============
+
+export interface PushTokenDTO {
+  id: string;
+  token: string;
+  platform: "ios" | "android";
+  createdAt: string;
+}
+
+export interface RegisterPushTokenRequest {
+  token: string;
+  platform: "ios" | "android";
+}
+
+// ============ Dashboard ============
+
+export interface DashboardDTO {
+  stats: {
+    activeWorkflows: number;
+    executionsToday: number;
+    systemKeyCost: number;
+  };
+  usage: BillingUsageDTO;
+  alerts: DashboardAlert[];
+  recentActivity: DashboardActivity[];
+}
+
+export interface DashboardAlert {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  type: "needs_attention" | "error" | "update_required";
+  message: string;
+}
+
+export interface DashboardActivity {
+  id: string;
+  workflowName: string;
+  status: string;
+  durationMs?: number;
+  triggerType?: string;
+  startedAt: string;
+  errorMessage?: string;
+}
+
+// ============ Extended User ============
+
+export interface UserProfileDTO extends UserDTO {
+  timezone: string;
+  language: string;
+  avatarUrl?: string;
+  biometricEnabled: boolean;
+}
+
+export interface UpdateProfileExtendedRequest {
+  email?: string;
+  timezone?: string;
+  language?: string;
+}
+
+// ============ Mobile App Config ============
+
+export interface MobileAppConfig {
+  minVersion: string;
+  currentVersion: string;
+  forceUpdate: boolean;
+  maintenanceMode: boolean;
+  message?: string;
 }
 
 // ============ SSE Events ============

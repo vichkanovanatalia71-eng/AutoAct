@@ -27,6 +27,10 @@ import { systemKeyRoutes } from "./routes/system-keys.js";
 import { adminPlatformKeyRoutes } from "./routes/admin-platform-keys.js";
 import { adminAnalysisRoutes } from "./routes/admin-analysis.js";
 import { adminNodeLibraryRoutes } from "./routes/admin-node-library.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
+import { billingHistoryRoutes } from "./routes/billing-history.js";
+import { sessionRoutes } from "./routes/sessions.js";
+import { mobileRoutes } from "./routes/mobile.js";
 
 const app = Fastify({ logger: true });
 
@@ -61,6 +65,10 @@ await app.register(settingsRoutes);
 await app.register(notificationRoutes);
 await app.register(sseRoutes);
 await app.register(reviewRoutes);
+await app.register(dashboardRoutes);
+await app.register(billingHistoryRoutes);
+await app.register(sessionRoutes);
+await app.register(mobileRoutes);
 
 // Public API v1
 await app.register(apiV1Routes);

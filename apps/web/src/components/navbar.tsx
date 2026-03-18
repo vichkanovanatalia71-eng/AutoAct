@@ -10,6 +10,7 @@ import {
   X,
   LogOut,
   ChevronDown,
+  Bell,
 } from "lucide-react";
 
 const navLinks = [
@@ -57,6 +58,11 @@ export function Navbar() {
                 <Button variant="ghost" size="sm">
                   <LayoutDashboard className="h-4 w-4" />
                   Dashboard
+                </Button>
+              </Link>
+              <Link href="/notifications">
+                <Button variant="ghost" size="sm">
+                  <Bell className="h-4 w-4" />
                 </Button>
               </Link>
               <div className="relative">

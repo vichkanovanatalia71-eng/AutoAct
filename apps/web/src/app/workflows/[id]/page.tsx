@@ -10,8 +10,6 @@ import {
   updateWorkflowStatus,
   deleteWorkflow,
   testWorkflow,
-  pauseWorkflow,
-  resumeWorkflow,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +28,11 @@ import {
   Copy,
   Check,
   FlaskConical,
+  BarChart3,
+  TrendingUp,
+  Timer,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 interface WorkflowData {
@@ -50,12 +53,13 @@ interface WorkflowData {
 interface Execution {
   id: string;
   workflowId: string;
-  workflowName: string;
+  workflowName?: string;
   status: string;
+  isTest: boolean;
+  durationMs?: number;
+  errorMessage?: string;
   startedAt: string;
   finishedAt?: string;
-  duration?: number;
-  error?: string;
 }
 
 const statusLabel: Record<string, string> = {
@@ -78,11 +82,14 @@ const statusVariant: Record<string, "success" | "warning" | "destructive"> = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-const execStatusIcons: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
-  success: { icon: CheckCircle2, color: "text-green-600", label: "Успішно" },
-  failed: { icon: XCircle, color: "text-red-600", label: "Помилка" },
-  running: { icon: Loader2, color: "text-blue-600", label: "Виконується" },
-  pending: { icon: AlertCircle, color: "text-amber-600", label: "Очікує" },
+const execStatusConfig: Record<
+  string,
+  { icon: typeof CheckCircle2; color: string; label: string; variant: "success" | "destructive" | "warning" | "default" }
+> = {
+  success: { icon: CheckCircle2, color: "text-green-600", label: "Успішно", variant: "success" },
+  failed: { icon: XCircle, color: "text-red-600", label: "Помилка", variant: "destructive" },
+  running: { icon: Loader2, color: "text-blue-600", label: "Виконується", variant: "warning" },
+  pending: { icon: AlertCircle, color: "text-amber-600", label: "Очікує", variant: "default" },
 };
 
 export default function WorkflowDetailPage() {
@@ -91,7 +98,11 @@ export default function WorkflowDetailPage() {
   const { user, loading: authLoading } = useAuth();
   const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
   const [executions, setExecutions] = useState<Execution[]>([]);
+  const [execTotal, setExecTotal] = useState(0);
+  const [execPage, setExecPage] = useState(1);
+  const [execTotalPages, setExecTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -109,18 +120,23 @@ export default function WorkflowDetailPage() {
       try {
         const [wf, ex] = await Promise.allSettled([
           getWorkflow(id),
-          getExecutions(id),
+          getExecutions({ workflowId: id, page: String(execPage) }),
         ]);
         if (wf.status === "fulfilled") setWorkflow(wf.value);
-        if (ex.status === "fulfilled") setExecutions(ex.value as Execution[]);
+        if (wf.status === "rejected") setError("Не вдалося завантажити воркфлоу");
+        if (ex.status === "fulfilled") {
+          setExecutions(ex.value.data as Execution[]);
+          setExecTotal(ex.value.total);
+          setExecTotalPages(ex.value.totalPages);
+        }
       } catch {
-        // handle error
+        setError("Не вдалося завантажити дані");
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [id, user]);
+  }, [id, user, execPage]);
 
   async function handleToggleStatus() {
     if (!workflow) return;
@@ -163,14 +179,24 @@ export default function WorkflowDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (authLoading || loading || !user) {
+  if (authLoading || !user) {
     return <p className="py-20 text-center text-gray-500">Завантаження...</p>;
   }
 
-  if (!workflow) {
+  if (loading) {
     return (
       <div className="py-20 text-center">
-        <p className="text-gray-500">Воркфлоу не знайдено</p>
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-600" />
+        <p className="mt-4 text-gray-500">Завантаження...</p>
+      </div>
+    );
+  }
+
+  if (error || !workflow) {
+    return (
+      <div className="py-20 text-center">
+        <XCircle className="mx-auto h-8 w-8 text-red-500" />
+        <p className="mt-4 text-gray-500">{error || "Воркфлоу не знайдено"}</p>
         <Link
           href="/workflows"
           className="mt-4 inline-block text-primary-600 hover:underline"
@@ -180,6 +206,33 @@ export default function WorkflowDetailPage() {
       </div>
     );
   }
+
+  // Compute stats from executions
+  const totalRuns = workflow.executionCount;
+  const successRuns = executions.filter((e) => e.status === "success").length;
+  const failedRuns = executions.filter((e) => e.status === "failed").length;
+  const successRate = totalRuns > 0 ? Math.round((successRuns / Math.max(executions.length, 1)) * 100) : 0;
+  const avgDuration =
+    executions.filter((e) => e.durationMs).length > 0
+      ? Math.round(
+          executions
+            .filter((e) => e.durationMs)
+            .reduce((sum, e) => sum + (e.durationMs || 0), 0) /
+            executions.filter((e) => e.durationMs).length /
+            1000
+        )
+      : 0;
+
+  const errors = executions.filter((e) => e.status === "failed" && e.errorMessage);
+  const errorCounts: Record<string, number> = {};
+  errors.forEach((e) => {
+    const msg = e.errorMessage || "Unknown";
+    errorCounts[msg] = (errorCounts[msg] || 0) + 1;
+  });
+  const mostCommonError = Object.entries(errorCounts).sort((a, b) => b[1] - a[1])[0];
+
+  // Credential mapping entries
+  const credentialEntries = Object.entries(workflow.credentialMapping);
 
   return (
     <div>
@@ -206,14 +259,14 @@ export default function WorkflowDetailPage() {
                 href="/credentials"
                 className="mt-2 inline-block text-sm font-medium text-amber-800 hover:underline"
               >
-                Перейти до облікових даних →
+                Перейти до облікових даних &rarr;
               </Link>
             </div>
           </div>
         </div>
       )}
 
-      {/* Workflow info */}
+      {/* Header: Status badge + action buttons */}
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -224,10 +277,7 @@ export default function WorkflowDetailPage() {
               </Badge>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={handleToggleStatus}
-              >
+              <Button variant="outline" onClick={handleToggleStatus}>
                 {workflow.status === "active" ? (
                   <>
                     <Pause className="h-4 w-4" />
@@ -250,7 +300,7 @@ export default function WorkflowDetailPage() {
                 ) : (
                   <FlaskConical className="h-4 w-4" />
                 )}
-                Тест
+                Запустити зараз
               </Button>
               <Button variant="destructive" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4" />
@@ -260,12 +310,11 @@ export default function WorkflowDetailPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Trigger info */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="text-sm text-gray-500">Шаблон</p>
-              <p className="font-medium text-gray-900">
-                {workflow.templateName}
-              </p>
+              <p className="font-medium text-gray-900">{workflow.templateName}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Створено</p>
@@ -274,9 +323,9 @@ export default function WorkflowDetailPage() {
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Всього виконань</p>
-              <p className="font-medium text-gray-900">
-                {workflow.executionCount}
+              <p className="text-sm text-gray-500">Тип тригера</p>
+              <p className="font-medium text-gray-900 capitalize">
+                {(workflow.triggerConfig as { type?: string })?.type || "—"}
               </p>
             </div>
             <div>
@@ -293,11 +342,9 @@ export default function WorkflowDetailPage() {
           {workflow.triggerConfig &&
             (workflow.triggerConfig as { type?: string }).type === "webhook" && (
               <div className="mt-6">
-                <p className="text-sm font-medium text-gray-500 mb-2">
-                  Webhook URL
-                </p>
+                <p className="mb-2 text-sm font-medium text-gray-500">Webhook URL</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-xs break-all text-gray-800">
+                  <code className="flex-1 break-all rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-800">
                     {API_URL}/webhooks/{workflow.id}
                   </code>
                   <Button variant="outline" size="sm" onClick={handleCopyWebhook}>
@@ -310,86 +357,104 @@ export default function WorkflowDetailPage() {
                 </div>
               </div>
             )}
-
-          {/* Credential mapping */}
-          {Object.keys(workflow.credentialMapping).length > 0 && (
-            <div className="mt-6">
-              <p className="text-sm font-medium text-gray-500">
-                Прив&apos;язані облікові дані
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {Object.entries(workflow.credentialMapping).map(
-                  ([service, value]) => {
-                    const isSystemKey =
-                      typeof value === "object" &&
-                      value !== null &&
-                      (value as { type?: string }).type === "system_key";
-                    return (
-                      <Badge
-                        key={service}
-                        variant={isSystemKey ? "secondary" : "outline"}
-                      >
-                        {service}
-                        {isSystemKey ? " (системний)" : ""}
-                      </Badge>
-                    );
-                  }
-                )}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Execution history */}
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Історія виконань
-        </h2>
-        {executions.length === 0 ? (
-          <p className="mt-4 text-gray-500">Ще немає виконань</p>
-        ) : (
+      {/* Stats cards */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+              <BarChart3 className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Всього запусків</p>
+              <p className="text-2xl font-bold text-gray-900">{totalRuns}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 text-green-600">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Успішність</p>
+              <p className="text-2xl font-bold text-gray-900">{successRate}%</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+              <Timer className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Сер. тривалість</p>
+              <p className="text-2xl font-bold text-gray-900">{avgDuration}с</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 text-red-600">
+              <XCircle className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Помилки</p>
+              <p className="text-2xl font-bold text-gray-900">{failedRuns}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Most common error */}
+      {mostCommonError && (
+        <Card className="mt-6 border-red-200">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
+              <div>
+                <p className="text-sm font-medium text-red-800">Найчастіша помилка ({mostCommonError[1]} разів)</p>
+                <p className="mt-1 text-sm text-red-700">{mostCommonError[0]}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Credential Mapping Table */}
+      {credentialEntries.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-gray-900">Облікові дані</h2>
           <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                  <th className="px-6 py-3 font-medium">Сервіс</th>
                   <th className="px-6 py-3 font-medium">Статус</th>
-                  <th className="px-6 py-3 font-medium">Початок</th>
-                  <th className="px-6 py-3 font-medium">Завершення</th>
-                  <th className="px-6 py-3 font-medium">Тривалість</th>
+                  <th className="px-6 py-3 font-medium">Тип</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {executions.map((ex) => {
-                  const info = execStatusIcons[ex.status] ?? execStatusIcons.pending;
-                  const StatusIcon = info.icon;
-                  const duration =
-                    ex.duration ??
-                    (ex.finishedAt
-                      ? Math.round(
-                          (new Date(ex.finishedAt).getTime() -
-                            new Date(ex.startedAt).getTime()) /
-                            1000
-                        )
-                      : null);
+                {credentialEntries.map(([service, value]) => {
+                  const isSystemKey =
+                    typeof value === "object" &&
+                    value !== null &&
+                    (value as unknown as { type?: string }).type === "system_key";
                   return (
-                    <tr key={ex.id}>
+                    <tr key={service}>
+                      <td className="px-6 py-4 font-medium capitalize text-gray-900">{service}</td>
                       <td className="px-6 py-4">
-                        <span className={`flex items-center gap-2 ${info.color}`}>
-                          <StatusIcon className="h-4 w-4" />
-                          {info.label}
-                        </span>
+                        <Badge variant="success">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Підключено
+                        </Badge>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {new Date(ex.startedAt).toLocaleString("uk-UA")}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {ex.finishedAt
-                          ? new Date(ex.finishedAt).toLocaleString("uk-UA")
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {duration !== null ? `${duration}с` : "—"}
+                      <td className="px-6 py-4">
+                        <Badge variant={isSystemKey ? "secondary" : "outline"}>
+                          {isSystemKey ? "Системний ключ" : "Ключ користувача"}
+                        </Badge>
                       </td>
                     </tr>
                   );
@@ -397,6 +462,123 @@ export default function WorkflowDetailPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* 7-day execution chart placeholder */}
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold text-gray-900">Графік виконань (7 днів)</h2>
+        <div className="mt-4 flex h-48 items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
+          <p className="text-gray-400">Chart coming soon</p>
+        </div>
+      </div>
+
+      {/* Execution history with pagination */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Історія виконань</h2>
+          {execTotal > 0 && (
+            <span className="text-sm text-gray-500">Всього: {execTotal}</span>
+          )}
+        </div>
+        {executions.length === 0 ? (
+          <p className="mt-4 text-gray-500">Ще немає виконань</p>
+        ) : (
+          <>
+            <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-500">
+                    <th className="px-6 py-3 font-medium">Статус</th>
+                    <th className="px-6 py-3 font-medium">Початок</th>
+                    <th className="px-6 py-3 font-medium">Завершення</th>
+                    <th className="px-6 py-3 font-medium">Тривалість</th>
+                    <th className="px-6 py-3 font-medium">Тест</th>
+                    <th className="px-6 py-3 font-medium">Помилка</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {executions.map((ex) => {
+                    const info = execStatusConfig[ex.status] ?? execStatusConfig.pending;
+                    const StatusIcon = info.icon;
+                    const durationSec = ex.durationMs
+                      ? Math.round(ex.durationMs / 1000)
+                      : ex.finishedAt
+                      ? Math.round(
+                          (new Date(ex.finishedAt).getTime() -
+                            new Date(ex.startedAt).getTime()) /
+                            1000
+                        )
+                      : null;
+                    return (
+                      <tr key={ex.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <Badge variant={info.variant}>
+                            <StatusIcon
+                              className={`mr-1 h-3 w-3 ${
+                                ex.status === "running" ? "animate-spin" : ""
+                              }`}
+                            />
+                            {info.label}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {new Date(ex.startedAt).toLocaleString("uk-UA")}
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {ex.finishedAt
+                            ? new Date(ex.finishedAt).toLocaleString("uk-UA")
+                            : "—"}
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {durationSec !== null ? `${durationSec}с` : "—"}
+                        </td>
+                        <td className="px-6 py-4">
+                          {ex.isTest && (
+                            <Badge variant="secondary">Тест</Badge>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {ex.errorMessage ? (
+                            <span className="text-xs text-red-600 line-clamp-1">
+                              {ex.errorMessage}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {execTotalPages > 1 && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setExecPage(Math.max(1, execPage - 1))}
+                  disabled={execPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-3 text-sm text-gray-600">
+                  {execPage} / {execTotalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setExecPage(Math.min(execTotalPages, execPage + 1))}
+                  disabled={execPage === execTotalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

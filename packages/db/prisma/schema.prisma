@@ -42,10 +42,16 @@ model User {
   twoFactorSecret     String?   @map("two_factor_secret")
   twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
   onboardingCompleted Boolean   @default(false) @map("onboarding_completed")
-  notificationPrefs   Json      @default("{\"email\":true,\"inApp\":true}") @map("notification_prefs")
+  notificationPrefs   Json      @default("{\"email\":true,\"inApp\":true,\"pushErrors\":true,\"pushActions\":true,\"pushExecutions\":false,\"weeklyReport\":false}") @map("notification_prefs")
   deletedAt           DateTime? @map("deleted_at")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  // Personal cabinet fields
+  timezone            String    @default("UTC")
+  language            String    @default("uk")
+  avatarUrl           String?   @map("avatar_url")
+  biometricEnabled    Boolean   @default(false) @map("biometric_enabled")
 
   workflows          UserWorkflow[]
   credentials        Credential[]
@@ -59,6 +65,8 @@ model User {
   referralsMade      Referral[]        @relation("referrer")
   referralsReceived  Referral[]        @relation("referred")
   auditLogs          AuditLog[]
+  pushTokens         PushToken[]
+  sessions           Session[]
 
   @@map("users")
 }
@@ -417,4 +425,54 @@ model Notification {
   @@index([readAt])
   @@index([createdAt])
   @@map("notifications")
+}
+
+// ============ Mobile & Session Tables ============
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String   // ios | android
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  deviceName       String?   @map("device_name")
+  ipAddress        String?   @map("ip_address")
+  userAgent        String?   @map("user_agent")
+  lastActiveAt     DateTime  @default(now()) @map("last_active_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  revokedAt        DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@map("sessions")
+}
+
+model BillingInvoice {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  stripeInvoiceId  String?  @map("stripe_invoice_id")
+  amount           Int      // cents
+  status           String   // paid | failed | pending
+  description      String
+  invoiceUrl       String?  @map("invoice_url")
+  periodStart      DateTime @map("period_start")
+  periodEnd        DateTime @map("period_end")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("billing_invoices")
 }

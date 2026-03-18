@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "AutoAct",
+    "slug": "autoact",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "autoact",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6366F1"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.autoact.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6366F1"
+      },
+      "package": "com.autoact.mobile"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-local-authentication"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
