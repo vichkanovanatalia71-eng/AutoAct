@@ -36,13 +36,13 @@ export default function ForgotPasswordPage() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || "Помилка надсилання запиту");
+        throw new Error(body.message || "Помилка відправки запиту");
       }
 
       setSuccess(true);
     } catch (err: unknown) {
       setError(
-        err instanceof Error ? err.message : "Помилка надсилання запиту"
+        err instanceof Error ? err.message : "Помилка відправки запиту"
       );
     } finally {
       setLoading(false);
@@ -61,8 +61,9 @@ export default function ForgotPasswordPage() {
               Лист надіслано
             </h2>
             <p className="text-sm text-gray-600">
-              Якщо обліковий запис з адресою <strong>{email}</strong> існує, ви
-              отримаєте лист з інструкціями для скидання пароля.
+              Якщо обліковий запис з адресою{" "}
+              <span className="font-medium">{email}</span> існує, ви отримаєте
+              лист з інструкціями для відновлення пароля.
             </p>
             <Link href="/auth/login">
               <Button variant="outline">
@@ -80,12 +81,12 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-[60vh] items-center justify-center">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary-100">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-100">
             <Mail className="h-6 w-6 text-primary-600" />
           </div>
-          <CardTitle className="text-2xl">Відновлення пароля</CardTitle>
+          <CardTitle className="mt-4 text-2xl">Відновлення пароля</CardTitle>
           <CardDescription>
-            Введіть email, пов&apos;язаний з вашим акаунтом
+            Введіть email, пов&apos;язаний з вашим обліковим записом
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -110,9 +111,8 @@ export default function ForgotPasswordPage() {
             </Button>
             <Link
               href="/auth/login"
-              className="flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700"
+              className="text-sm font-medium text-primary-600 hover:text-primary-700"
             >
-              <ArrowLeft className="h-3 w-3" />
               Повернутися до входу
             </Link>
           </CardFooter>

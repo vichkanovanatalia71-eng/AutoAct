@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Zap, Building2, Sparkles } from "lucide-react";
+import { Check, Zap, Building2, Rocket } from "lucide-react";
 
 const plans = [
   {
@@ -13,7 +13,6 @@ const plans = [
     name: "Free",
     price: "$0",
     period: "назавжди",
-    description: "Для початку роботи з автоматизацією",
     icon: Zap,
     features: [
       "100 виконань / місяць",
@@ -28,8 +27,7 @@ const plans = [
     name: "Pro",
     price: "$29",
     period: "/ місяць",
-    description: "Для професіоналів та малого бізнесу",
-    icon: Sparkles,
+    icon: Rocket,
     highlighted: true,
     features: [
       "5 000 виконань / місяць",
@@ -38,7 +36,7 @@ const plans = [
       "Пріоритетна підтримка",
       "Webhook тригери",
       "API доступ",
-      "Власні інтеграції",
+      "Розширена аналітика",
     ],
   },
   {
@@ -46,7 +44,6 @@ const plans = [
     name: "Business",
     price: "$99",
     period: "/ місяць",
-    description: "Для команд та великих проєктів",
     icon: Building2,
     features: [
       "50 000 виконань / місяць",
@@ -55,16 +52,16 @@ const plans = [
       "Виділена підтримка",
       "SLA 99.9%",
       "SSO інтеграція",
-      "Аудит логи",
-      "Командний доступ",
+      "Пріоритетне виконання",
+      "Виділений менеджер",
     ],
   },
 ];
 
 export default function PricingPage() {
   return (
-    <div className="py-12">
-      <div className="mx-auto max-w-5xl text-center">
+    <div className="mx-auto max-w-5xl py-12">
+      <div className="text-center">
         <h1 className="text-4xl font-extrabold text-gray-900">
           Тарифні плани
         </h1>
@@ -73,7 +70,7 @@ export default function PricingPage() {
         </p>
       </div>
 
-      <div className="mx-auto mt-12 grid max-w-5xl gap-8 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
         {plans.map((plan) => (
           <Card
             key={plan.id}
@@ -85,15 +82,14 @@ export default function PricingPage() {
           >
             {plan.highlighted && (
               <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <Badge variant="default">Популярний</Badge>
+                <Badge variant="default">Найпопулярніший</Badge>
               </div>
             )}
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <plan.icon className="h-5 w-5 text-primary-600" />
-                <CardTitle>{plan.name}</CardTitle>
+            <CardHeader className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary-100 text-primary-600">
+                <plan.icon className="h-6 w-6" />
               </div>
-              <p className="mt-1 text-sm text-gray-500">{plan.description}</p>
+              <CardTitle className="mt-4 text-xl">{plan.name}</CardTitle>
               <div className="mt-4">
                 <span className="text-4xl font-extrabold text-gray-900">
                   {plan.price}
@@ -110,13 +106,13 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-6">
+              <div className="mt-8">
                 <Link href="/auth/register">
                   <Button
                     className="w-full"
                     variant={plan.highlighted ? "default" : "outline"}
                   >
-                    Розпочати
+                    Розпочати безкоштовно
                   </Button>
                 </Link>
               </div>
@@ -125,48 +121,16 @@ export default function PricingPage() {
         ))}
       </div>
 
-      <div className="mx-auto mt-16 max-w-3xl text-center">
-        <h2 className="text-xl font-semibold text-gray-900">
-          Часті запитання
-        </h2>
-        <div className="mt-6 grid gap-6 text-left sm:grid-cols-2">
-          <div>
-            <h3 className="font-medium text-gray-900">
-              Чи можу я змінити план пізніше?
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Так, ви можете оновити або змінити план у будь-який момент в
-              налаштуваннях біллінгу.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-medium text-gray-900">
-              Що буде, якщо я перевищу ліміт?
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Ми повідомимо вас, коли ви наблизитесь до ліміту. Виконання
-              зупиняться при досягненні межі до наступного періоду.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-medium text-gray-900">
-              Чи є пробний період?
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Free план є безкоштовним назавжди. Платні плани мають 14-денний
-              пробний період.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-medium text-gray-900">
-              Як скасувати підписку?
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Ви можете скасувати підписку в будь-який момент. Доступ
-              залишиться до кінця оплаченого періоду.
-            </p>
-          </div>
-        </div>
+      <div className="mt-16 text-center">
+        <p className="text-gray-600">
+          Маєте питання щодо тарифів?{" "}
+          <a
+            href="mailto:support@autoact.io"
+            className="font-medium text-primary-600 hover:text-primary-700"
+          >
+            Зв&apos;яжіться з нами
+          </a>
+        </p>
       </div>
     </div>
   );

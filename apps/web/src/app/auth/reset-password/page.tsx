@@ -42,7 +42,7 @@ export default function ResetPasswordPage() {
     }
 
     if (!token) {
-      setError("Токен скидання пароля відсутній");
+      setError("Токен відновлення відсутній");
       return;
     }
 
@@ -79,14 +79,14 @@ export default function ResetPasswordPage() {
               <AlertTriangle className="h-8 w-8 text-red-600" />
             </div>
             <h2 className="text-xl font-semibold text-gray-900">
-              Недійсне посилання
+              Невалідне посилання
             </h2>
             <p className="text-sm text-gray-600">
-              Токен скидання пароля відсутній або недійсний. Спробуйте надіслати
-              запит на скидання пароля повторно.
+              Посилання для скидання пароля недійсне або прострочене. Спробуйте
+              запросити нове.
             </p>
             <Link href="/auth/forgot-password">
-              <Button variant="outline">Відновити пароль</Button>
+              <Button>Запросити нове посилання</Button>
             </Link>
           </CardContent>
         </Card>
@@ -106,8 +106,7 @@ export default function ResetPasswordPage() {
               Пароль змінено
             </h2>
             <p className="text-sm text-gray-600">
-              Ваш пароль успішно змінено. Тепер ви можете увійти з новим
-              паролем.
+              Ваш пароль успішно змінено. Тепер ви можете увійти з новим паролем.
             </p>
             <Link href="/auth/login">
               <Button>Увійти</Button>
@@ -122,11 +121,13 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-[60vh] items-center justify-center">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary-100">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-100">
             <Lock className="h-6 w-6 text-primary-600" />
           </div>
-          <CardTitle className="text-2xl">Новий пароль</CardTitle>
-          <CardDescription>Введіть новий пароль для вашого акаунту</CardDescription>
+          <CardTitle className="mt-4 text-2xl">Новий пароль</CardTitle>
+          <CardDescription>
+            Введіть новий пароль для вашого облікового запису
+          </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">

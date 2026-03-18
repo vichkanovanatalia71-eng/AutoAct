@@ -21,11 +21,11 @@ export default function VerifyEmailPage() {
   useEffect(() => {
     if (!token) {
       setStatus("error");
-      setErrorMessage("Токен підтвердження відсутній");
+      setErrorMessage("Токен верифікації відсутній");
       return;
     }
 
-    async function verifyEmail() {
+    async function verify() {
       try {
         const res = await fetch(`${API_URL}/auth/verify-email`, {
           method: "POST",
@@ -35,19 +35,19 @@ export default function VerifyEmailPage() {
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.message || "Помилка підтвердження email");
+          throw new Error(body.message || "Помилка верифікації");
         }
 
         setStatus("success");
       } catch (err: unknown) {
         setStatus("error");
         setErrorMessage(
-          err instanceof Error ? err.message : "Помилка підтвердження email"
+          err instanceof Error ? err.message : "Помилка верифікації email"
         );
       }
     }
 
-    verifyEmail();
+    verify();
   }, [token]);
 
   return (
@@ -58,10 +58,10 @@ export default function VerifyEmailPage() {
             <>
               <Loader2 className="h-12 w-12 animate-spin text-primary-600" />
               <h2 className="text-xl font-semibold text-gray-900">
-                Підтвердження email...
+                Верифікація email...
               </h2>
               <p className="text-sm text-gray-600">
-                Зачекайте, ми перевіряємо ваш токен.
+                Зачекайте, ми підтверджуємо вашу адресу електронної пошти.
               </p>
             </>
           )}
@@ -75,8 +75,8 @@ export default function VerifyEmailPage() {
                 Email підтверджено
               </h2>
               <p className="text-sm text-gray-600">
-                Вашу електронну пошту успішно підтверджено. Тепер ви можете
-                використовувати всі можливості платформи.
+                Вашу адресу електронної пошти успішно підтверджено. Тепер ви
+                можете повноцінно користуватися сервісом.
               </p>
               <Link href="/dashboard">
                 <Button>Перейти до панелі</Button>
@@ -90,7 +90,7 @@ export default function VerifyEmailPage() {
                 <AlertTriangle className="h-8 w-8 text-red-600" />
               </div>
               <h2 className="text-xl font-semibold text-gray-900">
-                Помилка підтвердження
+                Помилка верифікації
               </h2>
               <p className="text-sm text-gray-600">{errorMessage}</p>
               <div className="flex gap-3">
