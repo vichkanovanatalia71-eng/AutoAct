@@ -72,8 +72,9 @@ model WorkflowTemplate {
   cardLayout          Json?       @map("card_layout")
   rawJson             Json?       @map("raw_json")
 
-  userWorkflows UserWorkflow[]
-  syncLogs      SyncLog[]
+  userWorkflows   UserWorkflow[]
+  syncLogs        SyncLog[]
+  analysisReports WorkflowAnalysisReport[]
 
   @@index([category])
   @@index([triggerType])
@@ -206,4 +207,41 @@ model SystemKeyUsageLog {
   @@index([executionId])
   @@index([createdAt])
   @@map("system_key_usage_log")
+}
+
+model NativeNode {
+  id            String   @id @default(uuid())
+  nodeId        String   @unique @map("node_id")
+  name          String
+  category      String
+  replaces      String[]
+  inputSchema   Json     @map("input_schema")
+  outputSchema  Json     @map("output_schema")
+  configSchema  Json?    @map("config_schema")
+  executorCode  String   @map("executor_code") @db.Text
+  testCases     Json?    @map("test_cases")
+  status        String   @default("active")
+  isAiGenerated Boolean  @default(false) @map("is_ai_generated")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([status])
+  @@map("native_node_library")
+}
+
+model WorkflowAnalysisReport {
+  id                      String    @id @default(uuid())
+  templateId              String    @map("template_id")
+  nodeAnalysis            Json      @map("node_analysis")
+  optimizationSuggestions Json      @map("optimization_suggestions")
+  nodesToCreate           Json      @map("nodes_to_create")
+  status                  String    @default("pending")
+  appliedAt               DateTime? @map("applied_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  template WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("workflow_analysis_reports")
 }

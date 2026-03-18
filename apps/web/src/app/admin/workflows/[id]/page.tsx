@@ -36,6 +36,7 @@ import {
   Trash2,
   Clock,
 } from "lucide-react";
+import AnalysisReport from "@/components/admin/AnalysisReport";
 
 type JsonSource = "url" | "manual";
 
@@ -547,6 +548,9 @@ export default function EditTemplatePage() {
             </CardContent>
           </Card>
         )}
+
+        {/* AI Analysis */}
+        <AnalysisReport templateId={id} />
 
         {/* Sync history */}
         {syncLogs.length > 0 && (

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { diffWorkflowJson } from "@autoact/engine";
 import { authenticateAdmin } from "../plugins/admin.js";
+import { analyzeWorkflow } from "../services/node-analyzer.service.js";
 
 export async function adminTemplateRoutes(app: FastifyInstance) {
   // GET /admin/templates — List all templates with sync status
@@ -121,6 +122,11 @@ export async function adminTemplateRoutes(app: FastifyInstance) {
         syncStatus: "idle",
       },
     });
+
+    // Fire-and-forget: auto-analyze after creation
+    analyzeWorkflow(template.id, finalDefinition).catch((err) =>
+      request.log.error({ err }, "[auto-analysis] Failed after template creation"),
+    );
 
     return reply.status(201).send(template);
   });

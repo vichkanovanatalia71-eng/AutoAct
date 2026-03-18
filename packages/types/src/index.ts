@@ -45,7 +45,8 @@ export type NodeType =
   | "transform"
   | "set_variable"
   | "loop"
-  | "delay";
+  | "delay"
+  | "native";
 
 export interface WorkflowNode {
   id: string;
@@ -198,4 +199,64 @@ export interface ActivateWorkflowFullRequest {
     type: string;
     cron?: string;
   };
+}
+
+// ============ AI Node Analysis ============
+
+export interface NodeAnalysisEntry {
+  nodeId: string;
+  nodeType: string;
+  externalService: string | null;
+  hasNativeReplacement: boolean;
+  nativeNodeId: string | null;
+  confidence: number;
+  reason: string;
+}
+
+export interface OptimizationSuggestion {
+  id: string;
+  type: "parallelization" | "error_handling" | "caching" | "merge_requests";
+  description: string;
+  affectedNodes: string[];
+  priority: "high" | "medium" | "low";
+}
+
+export interface NodeToCreate {
+  suggestedId: string;
+  name: string;
+  replaces: string[];
+  implementationApproach: string;
+  packages: string[];
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+}
+
+export interface WorkflowAnalysisResult {
+  nodeAnalysis: NodeAnalysisEntry[];
+  optimizationSuggestions: OptimizationSuggestion[];
+  nodesToCreate: NodeToCreate[];
+}
+
+export interface NativeNodeDTO {
+  id: string;
+  nodeId: string;
+  name: string;
+  category: string;
+  replaces: string[];
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  status: string;
+  isAiGenerated: boolean;
+  createdAt: string;
+}
+
+export interface AnalysisReportDTO {
+  id: string;
+  templateId: string;
+  nodeAnalysis: NodeAnalysisEntry[];
+  optimizationSuggestions: OptimizationSuggestion[];
+  nodesToCreate: NodeToCreate[];
+  status: string;
+  appliedAt: string | null;
+  createdAt: string;
 }

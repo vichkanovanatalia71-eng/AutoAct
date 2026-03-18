@@ -187,6 +187,15 @@ async function createTemplateFromUrl(jsonUrl: string) {
     },
   });
 
+  // Fire-and-forget: auto-analyze after creation
+  import("./node-analyzer.service.js")
+    .then(({ analyzeWorkflow }) =>
+      analyzeWorkflow(template.id, parsed.rawJson),
+    )
+    .catch((err) =>
+      console.error("[auto-analysis] Failed after createTemplateFromUrl:", err),
+    );
+
   return template;
 }
 

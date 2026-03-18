@@ -11,11 +11,13 @@ import {
   RefreshCw,
   Settings,
   ShieldCheck,
+  Box,
 } from "lucide-react";
 
 const navItems = [
   { href: "/admin", label: "Панель управління", icon: LayoutDashboard },
   { href: "/admin/workflows", label: "Шаблони воркфлоу", icon: FileJson },
+  { href: "/admin/node-library", label: "Бібліотека вузлів", icon: Box },
   { href: "/admin/sync-logs", label: "Журнал синхронізацій", icon: RefreshCw },
   { href: "/admin/settings", label: "Налаштування", icon: Settings },
 ];

@@ -17,6 +17,8 @@ import { publicViewRoutes } from "./routes/public-views.js";
 import { pdfProxyRoutes } from "./routes/pdf-proxy.js";
 import { systemKeyRoutes } from "./routes/system-keys.js";
 import { adminPlatformKeyRoutes } from "./routes/admin-platform-keys.js";
+import { adminAnalysisRoutes } from "./routes/admin-analysis.js";
+import { adminNodeLibraryRoutes } from "./routes/admin-node-library.js";
 
 const app = Fastify({ logger: true });
 
@@ -50,6 +52,8 @@ await app.register(publicViewRoutes);
 await app.register(pdfProxyRoutes);
 await app.register(systemKeyRoutes);
 await app.register(adminPlatformKeyRoutes);
+await app.register(adminAnalysisRoutes);
+await app.register(adminNodeLibraryRoutes);
 
 app.get("/health", async () => ({ status: "ok" }));
 

@@ -252,6 +252,177 @@ export async function updateCardLayout(
   );
 }
 
+// ---------- AI Analysis ----------
+
+export interface AnalysisReport {
+  id: string;
+  templateId: string;
+  nodeAnalysis: Array<{
+    nodeId: string;
+    nodeType: string;
+    externalService: string | null;
+    hasNativeReplacement: boolean;
+    nativeNodeId: string | null;
+    confidence: number;
+    reason: string;
+  }>;
+  optimizationSuggestions: Array<{
+    id: string;
+    type: string;
+    description: string;
+    affectedNodes: string[];
+    priority: string;
+  }>;
+  nodesToCreate: Array<{
+    suggestedId: string;
+    name: string;
+    replaces: string[];
+    implementationApproach: string;
+    packages: string[];
+    inputSchema: Record<string, unknown>;
+    outputSchema: Record<string, unknown>;
+  }>;
+  status: string;
+  appliedAt: string | null;
+  createdAt: string;
+}
+
+export async function analyzeTemplate(id: string) {
+  return adminFetch<AnalysisReport>(`/admin/templates/${id}/analyze`, {
+    method: "POST",
+  });
+}
+
+export async function getTemplateAnalysis(id: string) {
+  return adminFetch<AnalysisReport | null>(`/admin/templates/${id}/analysis`);
+}
+
+export async function applyAnalysis(
+  id: string,
+  data: { nodeReplacements: string[]; optimizations: string[] }
+) {
+  return adminFetch<{
+    success: boolean;
+    appliedReplacements: number;
+    appliedOptimizations: number;
+    newVersion: number;
+  }>(`/admin/templates/${id}/analysis/apply`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ---------- Native Node Library ----------
+
+export interface NativeNodeSummary {
+  id: string;
+  nodeId: string;
+  name: string;
+  category: string;
+  replaces: string[];
+  status: string;
+  isAiGenerated: boolean;
+  createdAt: string;
+}
+
+export interface NativeNodeDetail extends NativeNodeSummary {
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  configSchema: Record<string, unknown> | null;
+  executorCode: string;
+  testCases: any[] | null;
+  updatedAt: string;
+}
+
+export interface NativeNodesResponse {
+  data: NativeNodeSummary[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export async function getNativeNodes(params?: Record<string, string>) {
+  const query = new URLSearchParams();
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value) query.set(key, value);
+    }
+  }
+  const qs = query.toString();
+  return adminFetch<NativeNodesResponse>(
+    `/admin/node-library${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function getNativeNode(nodeId: string) {
+  return adminFetch<NativeNodeDetail>(`/admin/node-library/${nodeId}`);
+}
+
+export async function createNativeNode(data: {
+  nodeId: string;
+  name: string;
+  category: string;
+  replaces: string[];
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  executorCode: string;
+  testCases?: any[];
+}) {
+  return adminFetch<NativeNodeDetail>("/admin/node-library", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateNativeNode(
+  nodeId: string,
+  data: Partial<{
+    name: string;
+    category: string;
+    replaces: string[];
+    executorCode: string;
+    testCases: any[];
+    status: string;
+  }>
+) {
+  return adminFetch<NativeNodeDetail>(`/admin/node-library/${nodeId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteNativeNode(nodeId: string, hard = false) {
+  return adminFetch(`/admin/node-library/${nodeId}${hard ? "?hard=true" : ""}`, {
+    method: "DELETE",
+  });
+}
+
+export async function generateNativeNode(data: {
+  suggestedId: string;
+  name: string;
+  replaces: string[];
+  implementationApproach: string;
+  packages: string[];
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+}) {
+  return adminFetch<NativeNodeDetail>("/admin/node-library/generate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function testNativeNode(nodeId: string) {
+  return adminFetch<{
+    passed: number;
+    failed: number;
+    total: number;
+    errors: string[];
+  }>(`/admin/node-library/${nodeId}/test`, {
+    method: "POST",
+  });
+}
+
 // ---------- Template Stats ----------
 
 export interface TemplateStatsResponse {

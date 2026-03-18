@@ -31,6 +31,10 @@ async function seed() {
     console.log(`  Inserted ${Math.min(i + 100, templates.length)} / ${templates.length}`);
   }
 
+  // Seed native nodes
+  const { seedNativeNodes } = await import("./seed-native-nodes.js");
+  await seedNativeNodes();
+
   console.log("Done!");
   await prisma.$disconnect();
 }
