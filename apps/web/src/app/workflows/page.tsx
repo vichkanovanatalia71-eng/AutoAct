@@ -11,16 +11,19 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Trash2, Zap, Plus } from "lucide-react";
+import { Play, Pause, Trash2, Zap, Plus, AlertTriangle } from "lucide-react";
 
 interface Workflow {
   id: string;
   name: string;
   status: string;
   templateId: string;
+  templateName?: string;
   lastExecution?: string;
   executionCount: number;
   createdAt: string;
+  needsReconfiguration?: boolean;
+  templateVersion?: number;
 }
 
 const statusLabel: Record<string, string> = {
@@ -134,11 +137,19 @@ export default function WorkflowsPage() {
                     </Link>
                   </td>
                   <td className="px-6 py-4">
-                    <Badge
-                      variant={statusVariant[w.status] ?? "default"}
-                    >
-                      {statusLabel[w.status] ?? w.status}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={statusVariant[w.status] ?? "default"}
+                      >
+                        {statusLabel[w.status] ?? w.status}
+                      </Badge>
+                      {w.needsReconfiguration && (
+                        <Badge variant="destructive" className="flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Потребує оновлення
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-gray-600">
                     {w.lastExecution

@@ -25,6 +25,8 @@ export async function workflowRoutes(app: FastifyInstance) {
         status: w.status,
         createdAt: w.createdAt.toISOString(),
         executionCount: w._count.executions,
+        needsReconfiguration: w.needsReconfiguration,
+        templateVersion: w.templateVersion,
       }))
     );
   });
@@ -57,6 +59,7 @@ export async function workflowRoutes(app: FastifyInstance) {
           status: "active",
           credentialMapping,
           triggerConfig: triggerConfig ? (triggerConfig as Prisma.InputJsonValue) : Prisma.JsonNull,
+          templateVersion: template.version,
         },
       });
 

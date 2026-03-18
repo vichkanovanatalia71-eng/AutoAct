@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   Loader2,
 } from "lucide-react";
 
@@ -36,6 +37,8 @@ interface WorkflowData {
   lastExecution?: string;
   executionCount: number;
   createdAt: string;
+  needsReconfiguration?: boolean;
+  templateVersion?: number;
 }
 
 interface Execution {
@@ -151,6 +154,28 @@ export default function WorkflowDetailPage() {
         <ArrowLeft className="h-4 w-4" />
         Назад до воркфлоу
       </Link>
+
+      {/* Reconfiguration banner */}
+      {workflow.needsReconfiguration && (
+        <div className="mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+            <div>
+              <h3 className="font-semibold text-amber-800">Потребує оновлення налаштувань</h3>
+              <p className="mt-1 text-sm text-amber-700">
+                Шаблон цього воркфлоу було оновлено. Додались нові обов&apos;язкові облікові дані.
+                Будь ласка, оновіть налаштування для продовження роботи.
+              </p>
+              <Link
+                href="/credentials"
+                className="mt-2 inline-block text-sm font-medium text-amber-800 hover:underline"
+              >
+                Перейти до облікових даних →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Workflow info */}
       <Card>

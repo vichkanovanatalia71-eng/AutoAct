@@ -9,6 +9,9 @@ import { workflowRoutes } from "./routes/workflows.js";
 import { executionRoutes } from "./routes/executions.js";
 import { billingRoutes } from "./routes/billing.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { adminTemplateRoutes } from "./routes/admin-templates.js";
+import { adminSyncLogRoutes } from "./routes/admin-sync-logs.js";
+import { adminSettingsRoutes } from "./routes/admin-settings.js";
 
 const app = Fastify({ logger: true });
 
@@ -34,8 +37,19 @@ await app.register(workflowRoutes);
 await app.register(executionRoutes);
 await app.register(billingRoutes);
 await app.register(webhookRoutes);
+await app.register(adminTemplateRoutes);
+await app.register(adminSyncLogRoutes);
+await app.register(adminSettingsRoutes);
 
 app.get("/health", async () => ({ status: "ok" }));
+
+// Start sync worker (non-blocking — server starts even if Redis is unavailable)
+try {
+  const { startSyncWorker } = await import("./workers/sync.worker.js");
+  await startSyncWorker();
+} catch (err) {
+  app.log.warn({ err }, "Failed to start sync worker — sync features will be unavailable");
+}
 
 const port = Number(process.env.PORT) || 3001;
 const host = process.env.HOST || "0.0.0.0";

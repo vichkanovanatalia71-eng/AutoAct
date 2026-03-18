@@ -20,6 +20,9 @@ importers:
       '@autoact/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@autoact/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@autoact/types':
         specifier: workspace:*
         version: link:../../packages/types

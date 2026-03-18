@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SyncStatus {
+  idle
+  syncing
+  error
+}
+
+enum SyncLogStatus {
+  success
+  error
+  no_change
+}
+
+enum AdminRole {
+  super_admin
+  editor
+}
+
 model User {
   id               String         @id @default(uuid())
   email            String         @unique
@@ -19,43 +36,59 @@ model User {
   workflows    UserWorkflow[]
   credentials  Credential[]
   subscription Subscription?
+  adminUser    AdminUser?
 
   @@map("users")
 }
 
 model WorkflowTemplate {
-  id                  String   @id @default(uuid())
+  id                  String      @id @default(uuid())
   name                String
   description         String?
   category            String
   tags                String[]
   definition          Json
-  requiredCredentials String[] @map("required_credentials")
-  triggerType         String   @map("trigger_type")
-  createdAt           DateTime @default(now()) @map("created_at")
+  requiredCredentials String[]    @map("required_credentials")
+  triggerType         String      @map("trigger_type")
+  createdAt           DateTime    @default(now()) @map("created_at")
+
+  // Sync fields
+  jsonUrl             String?     @map("json_url")
+  jsonUrlChecksum     String?     @map("json_url_checksum")
+  jsonUrlLastSyncedAt DateTime?   @map("json_url_last_synced_at")
+  version             Int         @default(1)
+  syncStatus          SyncStatus  @default(idle) @map("sync_status")
+  syncError           String?     @map("sync_error")
 
   userWorkflows UserWorkflow[]
+  syncLogs      SyncLog[]
 
   @@index([category])
   @@index([triggerType])
+  @@index([syncStatus])
   @@map("workflow_templates")
 }
 
 model UserWorkflow {
-  id               String   @id @default(uuid())
-  userId           String   @map("user_id")
-  templateId       String   @map("template_id")
-  status           String   @default("active")
-  credentialMapping Json     @map("credential_mapping")
-  triggerConfig    Json?    @map("trigger_config")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                   String   @id @default(uuid())
+  userId               String   @map("user_id")
+  templateId           String   @map("template_id")
+  status               String   @default("active")
+  credentialMapping    Json     @map("credential_mapping")
+  triggerConfig        Json?    @map("trigger_config")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  // Sync tracking
+  templateVersion      Int      @default(1) @map("template_version")
+  needsReconfiguration Boolean  @default(false) @map("needs_reconfiguration")
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   template   WorkflowTemplate  @relation(fields: [templateId], references: [id])
   executions Execution[]
 
   @@index([userId])
+  @@index([templateId])
   @@map("user_workflows")
 }
 
@@ -102,4 +135,28 @@ model Subscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("subscriptions")
+}
+
+model SyncLog {
+  id             String        @id @default(uuid())
+  templateId     String        @map("template_id")
+  status         SyncLogStatus
+  changesSummary Json?         @map("changes_summary")
+  syncedAt       DateTime      @default(now()) @map("synced_at")
+
+  template WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([syncedAt])
+  @@map("sync_logs")
+}
+
+model AdminUser {
+  id     String    @id @default(uuid())
+  userId String    @unique @map("user_id")
+  role   AdminRole @default(editor)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_users")
 }
