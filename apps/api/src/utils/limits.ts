@@ -7,7 +7,7 @@ export async function checkWorkflowLimit(userId: string, prisma: PrismaClient): 
   });
 
   const plan = (subscription?.plan ?? PlanType.FREE) as PlanType;
-  const limit = PLAN_LIMITS[plan].workflows;
+  const limit = subscription?.workflowsLimit ?? PLAN_LIMITS[plan].workflows;
 
   const count = await prisma.userWorkflow.count({
     where: { userId },
@@ -26,22 +26,16 @@ export async function checkExecutionLimit(userId: string, prisma: PrismaClient):
   });
 
   const plan = (subscription?.plan ?? PlanType.FREE) as PlanType;
-  const limit = PLAN_LIMITS[plan].executionsPerMonth;
+  const limit = subscription?.executionsLimit ?? PLAN_LIMITS[plan].executionsPerMonth;
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const workflows = await prisma.userWorkflow.findMany({
-    where: { userId },
-    select: { id: true },
-  });
-
-  const workflowIds = workflows.map((w) => w.id);
-
   const count = await prisma.execution.count({
     where: {
-      userWorkflowId: { in: workflowIds },
+      userWorkflow: { userId },
       startedAt: { gte: startOfMonth },
+      isTest: false,
     },
   });
 

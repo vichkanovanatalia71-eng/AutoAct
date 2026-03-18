@@ -34,6 +34,24 @@ export enum TriggerType {
   MANUAL = "manual",
 }
 
+export enum SubscriptionStatus {
+  ACTIVE = "active",
+  PAST_DUE = "past_due",
+  CANCELED = "canceled",
+  TRIALING = "trialing",
+}
+
+export enum NotificationType {
+  EXECUTION_SUCCESS = "execution_success",
+  EXECUTION_FAILED = "execution_failed",
+  WORKFLOW_PAUSED = "workflow_paused",
+  WORKFLOW_NEEDS_ATTENTION = "workflow_needs_attention",
+  PLAN_UPGRADED = "plan_upgraded",
+  PLAN_DOWNGRADED = "plan_downgraded",
+  REFERRAL_REWARD = "referral_reward",
+  SYSTEM = "system",
+}
+
 // ============ Workflow Definition ============
 
 export type NodeType =
@@ -73,11 +91,13 @@ export interface WorkflowDefinition {
 export interface RegisterRequest {
   email: string;
   password: string;
+  referralCode?: string;
 }
 
 export interface LoginRequest {
   email: string;
   password: string;
+  twoFactorCode?: string;
 }
 
 export interface AuthResponse {
@@ -89,6 +109,9 @@ export interface UserDTO {
   id: string;
   email: string;
   plan: PlanType;
+  emailVerified: boolean;
+  twoFactorEnabled: boolean;
+  onboardingCompleted: boolean;
   createdAt: string;
 }
 
@@ -125,28 +148,41 @@ export interface ExecutionDTO {
   id: string;
   workflowId: string;
   status: ExecutionStatus;
-  logs: ExecutionLog[];
+  logs: ExecutionLogEntry[];
+  durationMs?: number;
+  triggerType?: string;
+  errorNodeId?: string;
+  errorMessage?: string;
   startedAt: string;
   finishedAt?: string;
 }
 
-export interface ExecutionLog {
+export interface ExecutionLogEntry {
   nodeId: string;
+  nodeType?: string;
   status: "success" | "error";
   duration: number;
   output?: unknown;
   error?: string;
 }
 
+// Keep backward compat alias
+export type ExecutionLog = ExecutionLogEntry;
+
 export interface TemplateDTO {
   id: string;
   name: string;
+  slug?: string;
   description?: string;
   category: string;
+  categories?: string[];
   tags: string[];
+  icon?: string;
   triggerType: TriggerType;
   requiredCredentials: string[];
   nodeCount: number;
+  activationsCount?: number;
+  isPublished?: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -241,6 +277,7 @@ export interface NativeNodeDTO {
   id: string;
   nodeId: string;
   name: string;
+  description?: string;
   category: string;
   replaces: string[];
   inputSchema: Record<string, unknown>;
@@ -259,4 +296,180 @@ export interface AnalysisReportDTO {
   status: string;
   appliedAt: string | null;
   createdAt: string;
+}
+
+// ============ Auth Extended ============
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface TwoFactorSetupResponse {
+  secret: string;
+  qrCodeUrl: string;
+}
+
+export interface TwoFactorVerifyRequest {
+  code: string;
+}
+
+// ============ Settings ============
+
+export interface UpdateProfileRequest {
+  email?: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface NotificationPrefsRequest {
+  email?: boolean;
+  inApp?: boolean;
+}
+
+// ============ User API Keys ============
+
+export interface UserApiKeyDTO {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  expiresAt?: string;
+  lastUsedAt?: string;
+  createdAt: string;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  scopes?: string[];
+  expiresAt?: string;
+}
+
+export interface CreateApiKeyResponse {
+  id: string;
+  key: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  expiresAt?: string;
+  createdAt: string;
+}
+
+// ============ Notifications ============
+
+export interface NotificationDTO {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: unknown;
+  readAt?: string;
+  createdAt: string;
+}
+
+// ============ Reviews ============
+
+export interface CreateReviewRequest {
+  rating: number;
+  comment?: string;
+}
+
+export interface ReviewDTO {
+  id: string;
+  userId: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+}
+
+// ============ Referrals ============
+
+export interface ReferralDTO {
+  id: string;
+  code: string;
+  referredId?: string;
+  rewardGranted: boolean;
+  createdAt: string;
+}
+
+// ============ Audit Logs ============
+
+export interface AuditLogDTO {
+  id: string;
+  userId?: string;
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  ipAddress?: string;
+  createdAt: string;
+}
+
+// ============ Billing ============
+
+export interface BillingUsageDTO {
+  plan: PlanType;
+  status: string;
+  executionsUsed: number;
+  executionsLimit: number;
+  workflowsUsed: number;
+  workflowsLimit: number;
+  systemKeyCostCents: number;
+  periodEnd?: string;
+}
+
+// ============ SSE Events ============
+
+export interface SSEExecutionEvent {
+  type: "execution_started" | "execution_completed" | "execution_failed" | "node_completed";
+  executionId: string;
+  data: unknown;
+}
+
+export interface SSENotificationEvent {
+  type: "notification";
+  notification: NotificationDTO;
+}
+
+// ============ Public API v1 ============
+
+export interface ApiV1WorkflowDTO {
+  id: string;
+  name?: string;
+  status: string;
+  templateId: string;
+  createdAt: string;
+}
+
+export interface ApiV1ExecutionDTO {
+  id: string;
+  workflowId: string;
+  status: string;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+}
+
+// ============ Admin Stats ============
+
+export interface AdminStatsDTO {
+  totalUsers: number;
+  totalWorkflows: number;
+  totalExecutions: number;
+  totalTemplates: number;
+  activeSubscriptions: number;
+  executionsToday: number;
+  revenueThisMonth: number;
 }

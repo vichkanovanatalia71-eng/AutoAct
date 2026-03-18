@@ -3,6 +3,50 @@ import { authenticate } from "../plugins/auth.js";
 import { PlanType, PLAN_LIMITS } from "@autoact/types";
 
 export async function billingRoutes(app: FastifyInstance) {
+  // Get billing usage
+  app.get("/billing/usage", { preHandler: [authenticate] }, async (request, reply) => {
+    const { userId } = request.user;
+
+    const user = await app.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        subscription: true,
+        _count: { select: { workflows: true } },
+      },
+    });
+
+    if (!user) return reply.status(404).send({ error: "User not found" });
+
+    const plan = (user.subscription?.plan ?? PlanType.FREE) as PlanType;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [executionsUsed, systemKeyCost] = await Promise.all([
+      app.prisma.execution.count({
+        where: {
+          userWorkflow: { userId },
+          startedAt: { gte: startOfMonth },
+          isTest: false,
+        },
+      }),
+      app.prisma.systemKeyUsageLog.aggregate({
+        where: { userId, createdAt: { gte: startOfMonth } },
+        _sum: { cost: true },
+      }),
+    ]);
+
+    return reply.send({
+      plan,
+      status: user.subscription?.status ?? "active",
+      executionsUsed,
+      executionsLimit: user.subscription?.executionsLimit ?? PLAN_LIMITS[plan].executionsPerMonth,
+      workflowsUsed: user._count.workflows,
+      workflowsLimit: user.subscription?.workflowsLimit ?? PLAN_LIMITS[plan].workflows,
+      systemKeyCostCents: Math.round(Number(systemKeyCost._sum.cost ?? 0) * 100),
+      periodEnd: user.subscription?.periodEnd?.toISOString() ?? null,
+    });
+  });
+
   app.post<{ Body: { plan: string } }>(
     "/billing/checkout",
     { preHandler: [authenticate] },
@@ -17,7 +61,6 @@ export async function billingRoutes(app: FastifyInstance) {
       const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
       if (!stripeSecretKey) {
-        // Stub mode: return a mock checkout URL
         return reply.send({
           url: `https://checkout.stripe.com/mock?plan=${plan}&user=${userId}`,
         });
@@ -67,7 +110,7 @@ export async function billingRoutes(app: FastifyInstance) {
       });
 
       return reply.send({ url: session.url });
-    }
+    },
   );
 
   app.post(
@@ -101,7 +144,7 @@ export async function billingRoutes(app: FastifyInstance) {
       });
 
       return reply.send({ url: session.url });
-    }
+    },
   );
 
   app.post("/billing/webhook", async (request, reply) => {
@@ -122,7 +165,7 @@ export async function billingRoutes(app: FastifyInstance) {
       event = stripe.webhooks.constructEvent(
         (request.body as string) || "",
         signature,
-        webhookSecret
+        webhookSecret,
       );
     } catch (err) {
       return reply.status(400).send({ error: "Invalid webhook signature" });
@@ -139,15 +182,25 @@ export async function billingRoutes(app: FastifyInstance) {
             where: { userId },
             update: {
               plan: planType,
+              status: "active",
               stripeSubscriptionId: session.subscription,
               executionsLimit: PLAN_LIMITS[planType].executionsPerMonth,
+              workflowsLimit: planType === PlanType.BUSINESS ? 999999 : PLAN_LIMITS[planType].workflows,
             },
             create: {
               userId,
               plan: planType,
+              status: "active",
               stripeSubscriptionId: session.subscription,
               executionsLimit: PLAN_LIMITS[planType].executionsPerMonth,
+              workflowsLimit: planType === PlanType.BUSINESS ? 999999 : PLAN_LIMITS[planType].workflows,
             },
+          });
+
+          // Update user plan field
+          await app.prisma.user.update({
+            where: { id: userId },
+            data: { plan: planType },
           });
         }
         break;
@@ -163,6 +216,7 @@ export async function billingRoutes(app: FastifyInstance) {
           await app.prisma.subscription.update({
             where: { id: existing.id },
             data: {
+              status: subscription.status === "active" ? "active" : subscription.status === "past_due" ? "past_due" : "active",
               periodEnd: subscription.current_period_end
                 ? new Date(subscription.current_period_end * 1000)
                 : null,
@@ -183,9 +237,16 @@ export async function billingRoutes(app: FastifyInstance) {
             where: { id: existing.id },
             data: {
               plan: PlanType.FREE,
+              status: "canceled",
               stripeSubscriptionId: null,
               executionsLimit: PLAN_LIMITS[PlanType.FREE].executionsPerMonth,
+              workflowsLimit: PLAN_LIMITS[PlanType.FREE].workflows,
             },
+          });
+
+          await app.prisma.user.update({
+            where: { id: existing.userId },
+            data: { plan: PlanType.FREE },
           });
         }
         break;

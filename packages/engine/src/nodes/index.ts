@@ -9,6 +9,18 @@ import { emailHandler } from "./email";
 import { loopHandler } from "./loop";
 import { webhookHandler } from "./webhook";
 import { cronHandler } from "./cron";
+import { csvParseHandler } from "./csv-parse";
+import { jsonTransformHandler } from "./json-transform";
+import { htmlTemplateHandler } from "./html-template";
+import { textExtractRegexHandler } from "./text-extract-regex";
+import { dataValidateHandler } from "./data-validate";
+import { dateFormatHandler } from "./date-format";
+import { base64Handler } from "./base64";
+import { hashGenerateHandler } from "./hash-generate";
+import { urlShortenHandler } from "./url-shorten";
+import { markdownToHtmlHandler } from "./markdown-to-html";
+import { fileCompressHandler } from "./file-compress";
+import { qrCodeHandler } from "./qr-code";
 
 export type NodeHandler = (
   config: Record<string, unknown>,
@@ -26,6 +38,18 @@ export const nodeRegistry: Record<string, NodeHandler> = {
   loop: loopHandler,
   webhook: webhookHandler,
   cron: cronHandler,
+  csv_parse: csvParseHandler,
+  json_transform: jsonTransformHandler,
+  html_template: htmlTemplateHandler,
+  text_extract_regex: textExtractRegexHandler,
+  data_validate: dataValidateHandler,
+  date_format: dateFormatHandler,
+  base64: base64Handler,
+  hash_generate: hashGenerateHandler,
+  url_shorten: urlShortenHandler,
+  markdown_to_html: markdownToHtmlHandler,
+  file_compress: fileCompressHandler,
+  qr_code: qrCodeHandler,
 };
 
 // Cache compiled native node handlers

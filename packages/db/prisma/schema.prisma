@@ -24,20 +24,41 @@ enum AdminRole {
   editor
 }
 
+enum SubscriptionStatus {
+  active
+  past_due
+  canceled
+  trialing
+}
+
 model User {
-  id               String         @id @default(uuid())
-  email            String         @unique
-  passwordHash     String         @map("password_hash")
-  salt             String
-  stripeCustomerId String?        @map("stripe_customer_id")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  salt                String
+  stripeCustomerId    String?   @map("stripe_customer_id")
+  emailVerifiedAt     DateTime? @map("email_verified_at")
+  plan                String    @default("free")
+  twoFactorSecret     String?   @map("two_factor_secret")
+  twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
+  onboardingCompleted Boolean   @default(false) @map("onboarding_completed")
+  notificationPrefs   Json      @default("{\"email\":true,\"inApp\":true}") @map("notification_prefs")
+  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   workflows          UserWorkflow[]
   credentials        Credential[]
   subscription       Subscription?
   adminUser          AdminUser?
   systemKeyUsageLogs SystemKeyUsageLog[]
+  notifications      Notification[]
+  apiKeys            UserApiKey[]
+  favorites          UserFavorite[]
+  reviewsGiven       WorkflowReview[]
+  referralsMade      Referral[]        @relation("referrer")
+  referralsReceived  Referral[]        @relation("referred")
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
@@ -45,13 +66,19 @@ model User {
 model WorkflowTemplate {
   id                  String      @id @default(uuid())
   name                String
+  slug                String?     @unique
   description         String?
   category            String
+  categories          String[]    @default([])
   tags                String[]
+  icon                String?
   definition          Json
   requiredCredentials String[]    @map("required_credentials")
   triggerType         String      @map("trigger_type")
+  activationsCount    Int         @default(0) @map("activations_count")
+  isPublished         Boolean     @default(true) @map("is_published")
   createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
 
   // Sync fields
   jsonUrl             String?     @map("json_url")
@@ -75,26 +102,34 @@ model WorkflowTemplate {
   userWorkflows   UserWorkflow[]
   syncLogs        SyncLog[]
   analysisReports WorkflowAnalysisReport[]
+  favorites       UserFavorite[]
+  reviews         WorkflowReview[]
 
   @@index([category])
   @@index([triggerType])
   @@index([syncStatus])
+  @@index([isPublished])
   @@map("workflow_templates")
 }
 
 model UserWorkflow {
-  id                   String   @id @default(uuid())
-  userId               String   @map("user_id")
-  templateId           String   @map("template_id")
-  status               String   @default("active")
-  credentialMapping    Json     @map("credential_mapping")
-  triggerConfig        Json?    @map("trigger_config")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  templateId           String    @map("template_id")
+  name                 String?
+  status               String    @default("active")
+  credentialMapping    Json      @map("credential_mapping")
+  triggerConfig        Json?     @map("trigger_config")
+  webhookSecret        String?   @map("webhook_secret")
+  lastExecutedAt       DateTime? @map("last_executed_at")
+  executionsCount      Int       @default(0) @map("executions_count")
+  errorCount           Int       @default(0) @map("error_count")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   // Sync tracking
-  templateVersion      Int      @default(1) @map("template_version")
-  needsReconfiguration Boolean  @default(false) @map("needs_reconfiguration")
+  templateVersion      Int       @default(1) @map("template_version")
+  needsReconfiguration Boolean   @default(false) @map("needs_reconfiguration")
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   template   WorkflowTemplate  @relation(fields: [templateId], references: [id])
@@ -126,26 +161,55 @@ model Execution {
   status         String    @default("pending")
   logs           Json      @default("[]")
   isTest         Boolean   @default(false) @map("is_test")
+  durationMs     Int?      @map("duration_ms")
+  triggerType    String?   @map("trigger_type")
+  triggerPayload Json?     @map("trigger_payload")
+  errorNodeId    String?   @map("error_node_id")
+  errorMessage   String?   @map("error_message")
+  systemKeysCost Decimal?  @map("system_keys_cost") @db.Decimal(10, 6)
   startedAt      DateTime  @default(now()) @map("started_at")
   finishedAt     DateTime? @map("finished_at")
 
   userWorkflow       UserWorkflow       @relation(fields: [userWorkflowId], references: [id], onDelete: Cascade)
   systemKeyUsageLogs SystemKeyUsageLog[]
+  executionLogs      ExecutionLog[]
 
   @@index([userWorkflowId])
   @@index([startedAt])
+  @@index([status])
   @@map("executions")
 }
 
+model ExecutionLog {
+  id          String    @id @default(uuid())
+  executionId String    @map("execution_id")
+  nodeId      String    @map("node_id")
+  nodeType    String    @map("node_type")
+  status      String
+  input       Json?
+  output      Json?
+  startedAt   DateTime  @default(now()) @map("started_at")
+  durationMs  Int?      @map("duration_ms")
+  error       String?
+
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@map("execution_logs")
+}
+
 model Subscription {
-  id                   String   @id @default(uuid())
-  userId               String   @unique @map("user_id")
-  stripeSubscriptionId String?  @map("stripe_subscription_id")
-  plan                 String   @default("free")
-  executionsLimit      Int      @default(100) @map("executions_limit")
-  periodEnd            DateTime? @map("period_end")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id                   String             @id @default(uuid())
+  userId               String             @unique @map("user_id")
+  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  stripeMeteredItemId  String?            @map("stripe_metered_item_id")
+  plan                 String             @default("free")
+  status               SubscriptionStatus @default(active)
+  executionsLimit      Int                @default(100) @map("executions_limit")
+  workflowsLimit       Int                @default(3) @map("workflows_limit")
+  periodEnd            DateTime?          @map("period_end")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -167,9 +231,10 @@ model SyncLog {
 }
 
 model AdminUser {
-  id     String    @id @default(uuid())
-  userId String    @unique @map("user_id")
-  role   AdminRole @default(editor)
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  role      AdminRole @default(editor)
+  createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -184,6 +249,7 @@ model PlatformApiKey {
   iv                String
   pricePerExecution Decimal  @map("price_per_execution") @db.Decimal(10, 6)
   isActive          Boolean  @default(true) @map("is_active")
+  usageCount        Int      @default(0) @map("usage_count")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -198,6 +264,7 @@ model SystemKeyUsageLog {
   serviceType         String   @map("service_type")
   cost                Decimal  @db.Decimal(10, 6)
   stripeUsageRecordId String?  @map("stripe_usage_record_id")
+  reportedAt          DateTime? @map("reported_at")
   createdAt           DateTime @default(now()) @map("created_at")
 
   user      User      @relation(fields: [userId], references: [id])
@@ -213,6 +280,7 @@ model NativeNode {
   id            String   @id @default(uuid())
   nodeId        String   @unique @map("node_id")
   name          String
+  description   String?
   category      String
   replaces      String[]
   inputSchema   Json     @map("input_schema")
@@ -244,4 +312,109 @@ model WorkflowAnalysisReport {
 
   @@index([templateId])
   @@map("workflow_analysis_reports")
+}
+
+// ============ New Tables ============
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String?  @map("user_id")
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  oldValue     Json?    @map("old_value")
+  newValue     Json?    @map("new_value")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model UserApiKey {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  name      String
+  keyHash   String    @map("key_hash")
+  keyPrefix String    @map("key_prefix")
+  scopes    String[]  @default([])
+  expiresAt DateTime? @map("expires_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([keyHash])
+  @@map("user_api_keys")
+}
+
+model UserFavorite {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  templateId String   @map("template_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, templateId])
+  @@map("user_favorites")
+}
+
+model WorkflowReview {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  templateId String   @map("template_id")
+  rating     Int
+  comment    String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, templateId])
+  @@index([templateId])
+  @@map("workflow_reviews")
+}
+
+model Referral {
+  id             String   @id @default(uuid())
+  referrerId     String   @map("referrer_id")
+  referredId     String?  @map("referred_id")
+  code           String   @unique
+  rewardGranted  Boolean  @default(false) @map("reward_granted")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  referrer User  @relation("referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred User? @relation("referred", fields: [referredId], references: [id], onDelete: SetNull)
+
+  @@index([referrerId])
+  @@index([code])
+  @@map("referrals")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  type      String
+  title     String
+  body      String    @db.Text
+  data      Json?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([readAt])
+  @@index([createdAt])
+  @@map("notifications")
 }

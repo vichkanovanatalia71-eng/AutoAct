@@ -16,6 +16,8 @@ interface WorkflowJobData {
   executionId?: string;
   payload?: unknown;
   isTest?: boolean;
+  triggerType?: string;
+  triggerPayload?: unknown;
 }
 
 const MASTER_KEY = process.env.ENCRYPTION_MASTER_KEY ?? "";
@@ -42,7 +44,7 @@ function parseCredentialMapping(
 }
 
 async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
-  const { userWorkflowId, executionId, payload, isTest } = job.data;
+  const { userWorkflowId, executionId, payload, isTest, triggerType, triggerPayload } = job.data;
 
   // 1. Load UserWorkflow + Template + User credentials
   const userWorkflow = await prisma.userWorkflow.findUniqueOrThrow({
@@ -97,11 +99,16 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
 
       if (platformApiKey) {
         const decryptedData = decrypt(platformApiKey.encryptedKey, platformApiKey.iv, platformKey);
-        // System keys store a single API key string, wrap it
         decryptedCredentials[serviceType] = { apiKey: decryptedData };
         systemKeysUsed.push({
           service: serviceType,
           price: mapping.price_per_execution || Number(platformApiKey.pricePerExecution),
+        });
+
+        // Increment usage count
+        await prisma.platformApiKey.update({
+          where: { id: platformApiKey.id },
+          data: { usageCount: { increment: 1 } },
         });
       }
     }
@@ -119,31 +126,63 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
         userWorkflowId,
         status: "pending",
         isTest: isTest || false,
+        triggerType: triggerType || null,
+        triggerPayload: triggerPayload ? JSON.parse(JSON.stringify(triggerPayload)) : null,
       },
     });
   }
+
+  const startTime = Date.now();
 
   try {
     // 4. Update execution status to "running"
     await prisma.execution.update({
       where: { id: execution.id },
-      data: { status: "running" },
+      data: { status: "running", startedAt: new Date() },
     });
 
-    // 5. Execute workflow
-    const executor = new GraphExecutor(definition, decryptedCredentials);
-    const logs = await executor.execute(payload);
+    // 5. Execute workflow with enhanced options
+    const executor = new GraphExecutor(definition, decryptedCredentials, {
+      timeoutMs: 300_000,
+      maxRetries: 3,
+      enableParallel: true,
+      circuitBreakerThreshold: 5,
+    });
+    const logs = await executor.execute(payload || triggerPayload);
+
+    const durationMs = Date.now() - startTime;
 
     // 6. Determine final status
     const hasError = logs.some((log) => log.status === "error");
     const finalStatus = hasError ? "failed" : "success";
+    const errorLog = logs.find((log) => log.status === "error");
+
+    // 6.5. Save execution logs to separate table
+    for (const log of logs) {
+      await prisma.executionLog.create({
+        data: {
+          executionId: execution.id,
+          nodeId: log.nodeId,
+          nodeType: log.nodeType || "unknown",
+          status: log.status,
+          output: log.output ? JSON.parse(JSON.stringify(log.output)) : null,
+          durationMs: log.duration,
+          error: log.error || null,
+        },
+      });
+    }
 
     // 7. Save logs and update execution status
+    const totalSystemKeyCost = systemKeysUsed.reduce((sum, sk) => sum + sk.price, 0);
     await prisma.execution.update({
       where: { id: execution.id },
       data: {
         status: finalStatus,
         logs: JSON.parse(JSON.stringify(logs)),
+        durationMs,
+        errorNodeId: errorLog?.nodeId || null,
+        errorMessage: errorLog?.error || null,
+        systemKeysCost: totalSystemKeyCost > 0 ? totalSystemKeyCost : null,
         finishedAt: new Date(),
       },
     });
@@ -160,15 +199,20 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
       });
     }
 
-    // 9. Update workflow status based on test result
-    if (isTest) {
-      const newStatus = hasError ? "needs_attention" : "active";
-      await prisma.userWorkflow.update({
-        where: { id: userWorkflowId },
-        data: { status: newStatus },
-      });
-    }
+    // 9. Update workflow stats
+    await prisma.userWorkflow.update({
+      where: { id: userWorkflowId },
+      data: {
+        lastExecutedAt: new Date(),
+        executionsCount: { increment: 1 },
+        ...(hasError ? { errorCount: { increment: 1 } } : {}),
+        ...(isTest
+          ? { status: hasError ? "needs_attention" : "active" }
+          : {}),
+      },
+    });
   } catch (err) {
+    const durationMs = Date.now() - startTime;
     const errorMessage = err instanceof Error ? err.message : String(err);
 
     // Update execution as failed
@@ -176,10 +220,13 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
       where: { id: execution.id },
       data: {
         status: "failed",
+        durationMs,
+        errorMessage,
         logs: JSON.parse(
           JSON.stringify([
             {
               nodeId: "_worker",
+              nodeType: "system",
               status: "error",
               duration: 0,
               error: errorMessage,
@@ -194,7 +241,10 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
     if (isTest) {
       await prisma.userWorkflow.update({
         where: { id: userWorkflowId },
-        data: { status: "needs_attention" },
+        data: {
+          status: "needs_attention",
+          errorCount: { increment: 1 },
+        },
       });
     }
   }
@@ -204,7 +254,10 @@ export function createWorker(redisUrl: string): Worker<WorkflowJobData> {
   const worker = new Worker<WorkflowJobData>(
     "workflow-executions",
     processWorkflowJob,
-    { connection: { url: redisUrl } },
+    {
+      connection: { url: redisUrl },
+      concurrency: 5,
+    },
   );
 
   worker.on("failed", (job, err) => {

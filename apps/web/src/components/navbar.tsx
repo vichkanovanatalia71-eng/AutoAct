@@ -17,6 +17,7 @@ const navLinks = [
   { href: "/workflows", label: "Мої воркфлоу" },
   { href: "/credentials", label: "Credentials" },
   { href: "/billing", label: "Білінг" },
+  { href: "/settings", label: "Налаштування" },
 ];
 
 export function Navbar() {
