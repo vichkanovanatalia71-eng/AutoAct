@@ -187,6 +187,84 @@ export async function getExecutions(params?: { workflow_id?: string } | string) 
   >(path);
 }
 
+// ---------- Activation ----------
+
+export async function getActivationPreview(templateId: string) {
+  return apiFetch<{
+    templateId: string;
+    templateName: string;
+    triggerType: string;
+    credentials: Array<{
+      service: string;
+      status: "matched" | "missing";
+      credentialId?: string;
+      credentialName?: string;
+      systemKey?: {
+        displayName: string;
+        pricePerExecution: number;
+      };
+    }>;
+  }>(`/workflows/activate/preview/${templateId}`);
+}
+
+export async function activateWorkflow(data: {
+  templateId: string;
+  credentialMapping: Record<
+    string,
+    {
+      type: "user_credential" | "system_key";
+      credential_id?: string;
+      service?: string;
+      price_per_execution?: number;
+    }
+  >;
+  triggerConfig?: { type: string; cron?: string };
+}) {
+  return apiFetch<{
+    id: string;
+    templateId: string;
+    templateName: string;
+    status: string;
+    triggerType: string;
+    webhookUrl?: string;
+    testExecutionId: string;
+    createdAt: string;
+  }>("/workflows/activate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getSystemKeys() {
+  return apiFetch<
+    Array<{
+      id: string;
+      serviceType: string;
+      displayName: string;
+      pricePerExecution: number;
+      isActive: boolean;
+    }>
+  >("/system-keys");
+}
+
+export async function testWorkflow(id: string) {
+  return apiFetch<{ executionId: string; status: string }>(`/workflows/${id}/test`, {
+    method: "POST",
+  });
+}
+
+export async function pauseWorkflow(id: string) {
+  return apiFetch<{ id: string; status: string }>(`/workflows/${id}/pause`, {
+    method: "POST",
+  });
+}
+
+export async function resumeWorkflow(id: string) {
+  return apiFetch<{ id: string; status: string }>(`/workflows/${id}/resume`, {
+    method: "POST",
+  });
+}
+
 // ---------- Billing ----------
 
 export async function getUsage() {

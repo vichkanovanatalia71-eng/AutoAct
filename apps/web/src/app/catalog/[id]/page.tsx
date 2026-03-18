@@ -18,21 +18,15 @@ import {
   Tag,
   Layers,
 } from "lucide-react";
-import { getTemplate, getCredentials, createWorkflow } from "@/lib/api";
+import { getTemplate, getCredentials } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { PdfViewer } from "@/components/PdfViewer";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { WorkflowDiagram } from "@/components/WorkflowDiagram";
+import { ActivationWizard } from "@/components/ActivationWizard";
 
 interface TemplateNode {
   id: string;
@@ -107,13 +101,7 @@ export default function TemplateDetailPage() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [workflowName, setWorkflowName] = useState("");
-  const [credentialMapping, setCredentialMapping] = useState<
-    Record<string, string>
-  >({});
-  const [activating, setActivating] = useState(false);
-  const [error, setError] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const id = params.id as string;
 
@@ -151,24 +139,6 @@ export default function TemplateDetailPage() {
     }
     load();
   }, [id, user]);
-
-  async function handleActivate() {
-    if (!template) return;
-    setError("");
-    setActivating(true);
-    try {
-      const res = await createWorkflow({
-        templateId: template.id,
-        name: workflowName,
-        credentialMapping,
-      });
-      router.push(`/workflows/${(res as { id: string }).id}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Помилка активації");
-    } finally {
-      setActivating(false);
-    }
-  }
 
   function isSectionVisible(sectionType: string): boolean {
     if (!template?.cardLayout || template.cardLayout.length === 0) return true;
@@ -437,7 +407,7 @@ export default function TemplateDetailPage() {
               router.push("/auth/login");
               return;
             }
-            setDialogOpen(true);
+            setWizardOpen(true);
           }}
         >
           <Play className="h-4 w-4" />
@@ -445,76 +415,14 @@ export default function TemplateDetailPage() {
         </Button>
       </div>
 
-      {/* Activation dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
-        <DialogTitle>Активувати воркфлоу</DialogTitle>
-        <DialogDescription>
-          Налаштуйте назву та прив&apos;яжіть облікові дані для запуску.
-        </DialogDescription>
-
-        <div className="mt-4 space-y-4">
-          {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-
-          <Input
-            label="Назва воркфлоу"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-          />
-
-          {template.requiredCredentials.map((service) => {
-            const available = credentialsByService(service);
-            return (
-              <div key={service}>
-                <label className="mb-1.5 block text-sm font-medium capitalize text-gray-700">
-                  {service}
-                </label>
-                {available.length > 0 ? (
-                  <select
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                    value={credentialMapping[service] || ""}
-                    onChange={(e) =>
-                      setCredentialMapping((prev) => ({
-                        ...prev,
-                        [service]: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Оберіть облікові дані...</option>
-                    {available.map((cred) => (
-                      <option key={cred.id} value={cred.id}>
-                        {cred.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-sm text-amber-600">
-                    Немає збережених даних для {service}.{" "}
-                    <Link
-                      href="/credentials"
-                      className="text-primary-600 underline"
-                    >
-                      Додати
-                    </Link>
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDialogOpen(false)}>
-            Скасувати
-          </Button>
-          <Button onClick={handleActivate} disabled={activating}>
-            {activating ? "Завантаження..." : "Активувати"}
-          </Button>
-        </DialogFooter>
-      </Dialog>
+      {/* Activation Wizard */}
+      <ActivationWizard
+        templateId={template.id}
+        templateName={template.name}
+        triggerType={template.triggerType}
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+      />
     </div>
   );
 }

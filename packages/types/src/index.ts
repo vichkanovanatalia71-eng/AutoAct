@@ -13,8 +13,11 @@ export const PLAN_LIMITS: Record<PlanType, { workflows: number; executionsPerMon
 };
 
 export enum WorkflowStatus {
+  PENDING = "pending",
+  TESTING = "testing",
   ACTIVE = "active",
   PAUSED = "paused",
+  NEEDS_ATTENTION = "needs_attention",
   ERROR = "error",
 }
 
@@ -151,4 +154,48 @@ export interface PaginatedResponse<T> {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+// ============ Activation Flow ============
+
+export interface CredentialMappingEntry {
+  type: "user_credential" | "system_key";
+  credential_id?: string;
+  service?: string;
+  price_per_execution?: number;
+}
+
+export interface ActivationPreviewCredential {
+  service: string;
+  status: "matched" | "missing";
+  credentialId?: string;
+  credentialName?: string;
+  systemKey?: {
+    displayName: string;
+    pricePerExecution: number;
+  };
+}
+
+export interface ActivationPreviewResponse {
+  templateId: string;
+  templateName: string;
+  triggerType: string;
+  credentials: ActivationPreviewCredential[];
+}
+
+export interface SystemKeyDTO {
+  id: string;
+  serviceType: string;
+  displayName: string;
+  pricePerExecution: number;
+  isActive: boolean;
+}
+
+export interface ActivateWorkflowFullRequest {
+  templateId: string;
+  credentialMapping: Record<string, CredentialMappingEntry>;
+  triggerConfig?: {
+    type: string;
+    cron?: string;
+  };
 }

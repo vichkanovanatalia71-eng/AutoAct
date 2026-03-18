@@ -9,6 +9,9 @@ import {
   getExecutions,
   updateWorkflowStatus,
   deleteWorkflow,
+  testWorkflow,
+  pauseWorkflow,
+  resumeWorkflow,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +27,9 @@ import {
   AlertCircle,
   AlertTriangle,
   Loader2,
+  Copy,
+  Check,
+  FlaskConical,
 } from "lucide-react";
 
 interface WorkflowData {
@@ -53,16 +59,24 @@ interface Execution {
 }
 
 const statusLabel: Record<string, string> = {
+  pending: "Очікує",
+  testing: "Тестування",
   active: "Активний",
   paused: "Пауза",
+  needs_attention: "Потребує уваги",
   error: "Помилка",
 };
 
 const statusVariant: Record<string, "success" | "warning" | "destructive"> = {
+  pending: "warning",
+  testing: "warning",
   active: "success",
   paused: "warning",
+  needs_attention: "destructive",
   error: "destructive",
 };
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const execStatusIcons: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
   success: { icon: CheckCircle2, color: "text-green-600", label: "Успішно" },
@@ -78,6 +92,8 @@ export default function WorkflowDetailPage() {
   const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   const id = params.id as string;
 
@@ -125,6 +141,26 @@ export default function WorkflowDetailPage() {
     } catch {
       // handle error
     }
+  }
+
+  async function handleTest() {
+    setTesting(true);
+    try {
+      await testWorkflow(id);
+      setWorkflow((prev) => (prev ? { ...prev, status: "testing" } : prev));
+    } catch {
+      // handle error
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function handleCopyWebhook() {
+    if (!workflow) return;
+    const webhookUrl = `${API_URL}/webhooks/${workflow.id}`;
+    navigator.clipboard.writeText(webhookUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   if (authLoading || loading || !user) {
@@ -204,6 +240,18 @@ export default function WorkflowDetailPage() {
                   </>
                 )}
               </Button>
+              <Button
+                variant="outline"
+                onClick={handleTest}
+                disabled={testing || workflow.status === "testing"}
+              >
+                {testing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FlaskConical className="h-4 w-4" />
+                )}
+                Тест
+              </Button>
               <Button variant="destructive" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4" />
                 Видалити
@@ -241,6 +289,28 @@ export default function WorkflowDetailPage() {
             </div>
           </div>
 
+          {/* Webhook URL */}
+          {workflow.triggerConfig &&
+            (workflow.triggerConfig as { type?: string }).type === "webhook" && (
+              <div className="mt-6">
+                <p className="text-sm font-medium text-gray-500 mb-2">
+                  Webhook URL
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-xs break-all text-gray-800">
+                    {API_URL}/webhooks/{workflow.id}
+                  </code>
+                  <Button variant="outline" size="sm" onClick={handleCopyWebhook}>
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
           {/* Credential mapping */}
           {Object.keys(workflow.credentialMapping).length > 0 && (
             <div className="mt-6">
@@ -249,11 +319,21 @@ export default function WorkflowDetailPage() {
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {Object.entries(workflow.credentialMapping).map(
-                  ([service, credId]) => (
-                    <Badge key={service} variant="outline">
-                      {service}: {credId}
-                    </Badge>
-                  )
+                  ([service, value]) => {
+                    const isSystemKey =
+                      typeof value === "object" &&
+                      value !== null &&
+                      (value as { type?: string }).type === "system_key";
+                    return (
+                      <Badge
+                        key={service}
+                        variant={isSystemKey ? "secondary" : "outline"}
+                      >
+                        {service}
+                        {isSystemKey ? " (системний)" : ""}
+                      </Badge>
+                    );
+                  }
                 )}
               </div>
             </div>

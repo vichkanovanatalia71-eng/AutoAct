@@ -1,16 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { Queue } from "bullmq";
-
-let workflowQueue: Queue | null = null;
-
-function getQueue(): Queue {
-  if (!workflowQueue) {
-    workflowQueue = new Queue("workflow-executions", {
-      connection: { url: process.env.REDIS_URL || "redis://localhost:6379" },
-    });
-  }
-  return workflowQueue;
-}
+import { getWorkflowQueue } from "../utils/queue.js";
 
 export async function webhookRoutes(app: FastifyInstance) {
   app.post<{ Params: { workflowId: string } }>(
@@ -45,7 +34,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
 
       // Enqueue BullMQ job
-      const queue = getQueue();
+      const queue = getWorkflowQueue();
       await queue.add("execute-workflow", {
         executionId: execution.id,
         workflowId: workflow.id,

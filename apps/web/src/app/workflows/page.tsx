@@ -27,14 +27,20 @@ interface Workflow {
 }
 
 const statusLabel: Record<string, string> = {
+  pending: "Очікує",
+  testing: "Тестування",
   active: "Активний",
   paused: "Пауза",
+  needs_attention: "Потребує уваги",
   error: "Помилка",
 };
 
 const statusVariant: Record<string, "success" | "warning" | "destructive"> = {
+  pending: "warning",
+  testing: "warning",
   active: "success",
   paused: "warning",
+  needs_attention: "destructive",
   error: "destructive",
 };
 

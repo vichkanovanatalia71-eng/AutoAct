@@ -15,6 +15,8 @@ import { adminSettingsRoutes } from "./routes/admin-settings.js";
 import { adminRichTemplateRoutes } from "./routes/admin-rich-templates.js";
 import { publicViewRoutes } from "./routes/public-views.js";
 import { pdfProxyRoutes } from "./routes/pdf-proxy.js";
+import { systemKeyRoutes } from "./routes/system-keys.js";
+import { adminPlatformKeyRoutes } from "./routes/admin-platform-keys.js";
 
 const app = Fastify({ logger: true });
 
@@ -46,6 +48,8 @@ await app.register(adminSettingsRoutes);
 await app.register(adminRichTemplateRoutes);
 await app.register(publicViewRoutes);
 await app.register(pdfProxyRoutes);
+await app.register(systemKeyRoutes);
+await app.register(adminPlatformKeyRoutes);
 
 app.get("/health", async () => ({ status: "ok" }));
 
@@ -55,6 +59,14 @@ try {
   await startSyncWorker();
 } catch (err) {
   app.log.warn({ err }, "Failed to start sync worker — sync features will be unavailable");
+}
+
+// Start billing worker (non-blocking)
+try {
+  const { startBillingWorker } = await import("./workers/billing.worker.js");
+  await startBillingWorker();
+} catch (err) {
+  app.log.warn({ err }, "Failed to start billing worker — metered billing will be unavailable");
 }
 
 const port = Number(process.env.PORT) || 3001;
