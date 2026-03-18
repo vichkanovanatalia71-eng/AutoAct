@@ -30,7 +30,6 @@ export default function ProfileSettingsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
   const [timezone, setTimezone] = useState("Europe/Kyiv");
   const [language, setLanguage] = useState("uk");
   const [saving, setSaving] = useState(false);
@@ -98,16 +97,6 @@ export default function ProfileSettingsPage() {
               <p className="font-medium text-gray-900">{user.email}</p>
               <p className="text-sm text-gray-500">План: {user.plan || "Free"}</p>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Ім&apos;я</label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1"
-              placeholder="Ваше ім'я"
-            />
           </div>
 
           <div>

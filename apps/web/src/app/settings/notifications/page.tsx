@@ -44,7 +44,19 @@ export default function NotificationsSettingsPage() {
       await updateNotificationPrefs({
         email: emailNotif,
         inApp: inAppNotif,
-      });
+        pushErrors: pushNotif,
+        pushActions: pushNotif,
+        pushExecutions: false,
+        weeklyReport: false,
+        execFailEmail: execFailEmail,
+        execFailInApp: execFailInApp,
+        usageLimitEmail: usageLimitEmail,
+        usageLimitInApp: usageLimitInApp,
+        billingEmail: billingEmail,
+        billingInApp: billingInApp,
+        securityEmail: securityEmail,
+        securityInApp: securityInApp,
+      } as any);
       showMsg("success", "Налаштування сповіщень збережено");
     } catch (e: any) {
       showMsg("error", e.message || "Помилка збереження");

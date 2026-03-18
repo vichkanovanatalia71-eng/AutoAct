@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -97,11 +97,23 @@ function TemplateCard({
 
 export default function CatalogScreen() {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState("");
   const router = useRouter();
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 400);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [search]);
 
   const params: Record<string, string> = {};
-  if (search.trim()) params.search = search.trim();
+  if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
   if (category) params.category = category;
 
   const { data, isLoading, isError, error, refetch, isRefetching } =

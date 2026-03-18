@@ -19,6 +19,13 @@ export async function mobileRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "platform must be 'ios' or 'android'" });
       }
 
+      // Check if token belongs to another user
+      const existing = await app.prisma.pushToken.findUnique({ where: { token } });
+      if (existing && existing.userId !== userId) {
+        // Delete the old association first (device changed hands)
+        await app.prisma.pushToken.delete({ where: { token } });
+      }
+
       await app.prisma.pushToken.upsert({
         where: { token },
         update: { userId, platform },
@@ -66,6 +73,7 @@ export async function mobileRoutes(app: FastifyInstance) {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    try {
     const [user, recentExecutions] = await Promise.all([
       app.prisma.user.findUnique({
         where: { id: userId },
@@ -145,8 +153,12 @@ export async function mobileRoutes(app: FastifyInstance) {
         id: w.id,
         workflowId: w.id,
         workflowName: w.template.name,
-        status: w.status,
-        needsReconfiguration: w.needsReconfiguration,
+        type: w.needsReconfiguration ? "update_required" : w.status === "needs_attention" ? "needs_attention" : "error",
+        message: w.needsReconfiguration
+          ? "Шаблон оновлено, потрібна переналаштування"
+          : w.status === "needs_attention"
+            ? "Воркфлоу потребує уваги"
+            : "Помилка виконання воркфлоу",
       }));
 
     const recentActivity = recentExecutions.map((e) => ({
@@ -161,6 +173,10 @@ export async function mobileRoutes(app: FastifyInstance) {
     }));
 
     return reply.send({ stats, usage, alerts, recentActivity });
+    } catch (err) {
+      request.log.error(err, "Dashboard data fetch failed");
+      return reply.status(500).send({ error: "Failed to load dashboard data" });
+    }
   });
 
   // App config

@@ -31,6 +31,7 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { billingHistoryRoutes } from "./routes/billing-history.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { mobileRoutes } from "./routes/mobile.js";
+import { favoritesRoutes } from "./routes/favorites.js";
 
 const app = Fastify({ logger: true });
 
@@ -69,6 +70,7 @@ await app.register(dashboardRoutes);
 await app.register(billingHistoryRoutes);
 await app.register(sessionRoutes);
 await app.register(mobileRoutes);
+await app.register(favoritesRoutes);
 
 // Public API v1
 await app.register(apiV1Routes);

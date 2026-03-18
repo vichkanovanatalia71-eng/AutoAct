@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import * as Clipboard from "expo-clipboard";
 import { useReferral } from "@autoact/hooks";
 
 export default function ReferralScreen() {
@@ -26,8 +27,9 @@ export default function ReferralScreen() {
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (data?.code) {
+      await Clipboard.setStringAsync(data.code);
       Alert.alert("Скопійовано", `Код: ${data.code}`);
     }
   };

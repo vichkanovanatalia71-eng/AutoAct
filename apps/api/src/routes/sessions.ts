@@ -12,6 +12,8 @@ export async function sessionRoutes(app: FastifyInstance) {
       orderBy: { lastActiveAt: "desc" },
     });
 
+    const currentSessionId = (request.headers["x-session-id"] as string) || null;
+
     return reply.send(
       sessions.map((s) => ({
         id: s.id,
@@ -19,6 +21,7 @@ export async function sessionRoutes(app: FastifyInstance) {
         ipAddress: s.ipAddress,
         userAgent: s.userAgent,
         lastActiveAt: s.lastActiveAt.toISOString(),
+        isCurrent: currentSessionId ? s.id === currentSessionId : false,
         createdAt: s.createdAt.toISOString(),
       })),
     );

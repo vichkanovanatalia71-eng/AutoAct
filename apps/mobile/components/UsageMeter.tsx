@@ -14,7 +14,7 @@ export default function UsageMeter({
   color,
 }: UsageMeterProps) {
   const isUnlimited = !isFinite(limit);
-  const percentage = isUnlimited ? 0 : Math.min((current / limit) * 100, 100);
+  const percentage = isUnlimited || limit <= 0 ? 0 : Math.min((current / limit) * 100, 100);
   const isWarning = percentage >= 80;
   const isDanger = percentage >= 95;
 

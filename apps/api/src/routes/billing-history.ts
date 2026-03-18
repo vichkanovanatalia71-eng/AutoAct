@@ -34,12 +34,10 @@ export async function billingHistoryRoutes(app: FastifyInstance) {
           periodEnd: inv.periodEnd.toISOString(),
           createdAt: inv.createdAt.toISOString(),
         })),
-        pagination: {
-          page,
-          pageSize,
-          total,
-          totalPages: Math.ceil(total / pageSize),
-        },
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
       });
     },
   );

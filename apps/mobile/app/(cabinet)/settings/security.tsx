@@ -18,6 +18,7 @@ import {
   useSetup2FA,
   useVerify2FA,
   useDisable2FA,
+  apiFetch,
 } from "@autoact/hooks";
 
 export default function SecurityScreen() {
@@ -101,32 +102,32 @@ export default function SecurityScreen() {
   };
 
   const handleDisable2FA = () => {
-    Alert.prompt
-      ? Alert.alert(
-          "Вимкнути 2FA?",
-          "Введіть код з автентифікатора для підтвердження",
-          [
-            { text: "Скасувати", style: "cancel" },
-            {
-              text: "Вимкнути",
-              style: "destructive",
-              onPress: () => {
-                if (twoFactorCode.trim()) {
-                  disable2FA.mutate(twoFactorCode.trim(), {
-                    onSuccess: () => {
-                      Alert.alert("Готово", "2FA вимкнено");
-                      setTwoFactorCode("");
-                    },
-                    onError: (err: any) => {
-                      Alert.alert("Помилка", err.message);
-                    },
-                  });
-                }
+    if (!twoFactorCode.trim()) {
+      Alert.alert("Помилка", "Введіть код з автентифікатора у поле нижче");
+      return;
+    }
+    Alert.alert(
+      "Вимкнути 2FA?",
+      "Ви впевнені, що хочете вимкнути двофакторну автентифікацію?",
+      [
+        { text: "Скасувати", style: "cancel" },
+        {
+          text: "Вимкнути",
+          style: "destructive",
+          onPress: () => {
+            disable2FA.mutate(twoFactorCode.trim(), {
+              onSuccess: () => {
+                Alert.alert("Готово", "2FA вимкнено");
+                setTwoFactorCode("");
               },
-            },
-          ]
-        )
-      : Alert.alert("Вимкнути 2FA", "Введіть код у поле нижче та натисніть ще раз");
+              onError: (err: any) => {
+                Alert.alert("Помилка", err.message || "Невірний код");
+              },
+            });
+          },
+        },
+      ]
+    );
   };
 
   const handleToggleBiometric = async (value: boolean) => {
@@ -136,12 +137,28 @@ export default function SecurityScreen() {
         cancelLabel: "Скасувати",
       });
       if (result.success) {
-        setBiometricEnabled(true);
-        Alert.alert("Готово", "Біометричний вхід увімкнено");
+        try {
+          await apiFetch("/settings/profile", {
+            method: "PATCH",
+            body: JSON.stringify({ biometricEnabled: true }),
+          });
+          setBiometricEnabled(true);
+          Alert.alert("Готово", "Біометричний вхід увімкнено");
+        } catch {
+          Alert.alert("Помилка", "Не вдалося зберегти налаштування");
+        }
       }
     } else {
-      setBiometricEnabled(false);
-      Alert.alert("Готово", "Біометричний вхід вимкнено");
+      try {
+        await apiFetch("/settings/profile", {
+          method: "PATCH",
+          body: JSON.stringify({ biometricEnabled: false }),
+        });
+        setBiometricEnabled(false);
+        Alert.alert("Готово", "Біометричний вхід вимкнено");
+      } catch {
+        Alert.alert("Помилка", "Не вдалося зберегти налаштування");
+      }
     }
   };
 

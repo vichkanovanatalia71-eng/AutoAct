@@ -35,6 +35,16 @@ interface Session {
   current: boolean;
 }
 
+function mapSession(raw: any): Session {
+  return {
+    id: raw.id,
+    device: raw.deviceName || raw.userAgent || "Невідомий пристрій",
+    ip: raw.ipAddress || "—",
+    lastActive: raw.lastActiveAt || raw.createdAt,
+    current: raw.isCurrent || false,
+  };
+}
+
 export default function SecuritySettingsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -64,7 +74,7 @@ export default function SecuritySettingsPage() {
   useEffect(() => {
     if (!user) return;
     getSessions()
-      .then(setSessions)
+      .then((data: any[]) => setSessions(data.map(mapSession)))
       .catch(() => {})
       .finally(() => setSessionsLoading(false));
   }, [user]);

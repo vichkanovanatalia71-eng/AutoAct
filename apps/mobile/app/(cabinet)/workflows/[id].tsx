@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Clipboard from "expo-linking";
+import * as Clipboard from "expo-clipboard";
 import {
   useWorkflow,
   useWorkflowExecutions,
@@ -110,8 +110,9 @@ export default function WorkflowDetailScreen() {
     });
   };
 
-  const copyWebhook = () => {
+  const copyWebhook = async () => {
     if (workflow?.webhookUrl) {
+      await Clipboard.setStringAsync(workflow.webhookUrl);
       Alert.alert("Скопійовано", "Webhook URL скопійовано в буфер обміну");
     }
   };

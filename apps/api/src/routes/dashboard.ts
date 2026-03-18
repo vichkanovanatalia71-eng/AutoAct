@@ -10,6 +10,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    try {
     const [
       user,
       activeWorkflows,
@@ -103,9 +104,12 @@ export async function dashboardRoutes(app: FastifyInstance) {
       id: w.id,
       workflowId: w.id,
       workflowName: w.template.name,
-      status: w.status,
-      needsReconfiguration: w.needsReconfiguration,
-      createdAt: w.createdAt.toISOString(),
+      type: w.needsReconfiguration ? "update_required" : w.status === "needs_attention" ? "needs_attention" : "error",
+      message: w.needsReconfiguration
+        ? "Шаблон оновлено, потрібна переналаштування"
+        : w.status === "needs_attention"
+          ? "Воркфлоу потребує уваги"
+          : "Помилка виконання воркфлоу",
     }));
 
     const recentActivity = recentExecutions.map((e) => ({
@@ -120,5 +124,9 @@ export async function dashboardRoutes(app: FastifyInstance) {
     }));
 
     return reply.send({ stats, usage, alerts, recentActivity });
+    } catch (err) {
+      request.log.error(err, "Dashboard data fetch failed");
+      return reply.status(500).send({ error: "Failed to load dashboard data" });
+    }
   });
 }

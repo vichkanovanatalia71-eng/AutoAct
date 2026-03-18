@@ -16,6 +16,7 @@
     "@autoact/ui-tokens": "workspace:*",
     "@tanstack/react-query": "^5.60.0",
     "expo": "~52.0.0",
+    "expo-clipboard": "~7.0.0",
     "expo-constants": "~17.0.0",
     "expo-linking": "~7.0.0",
     "expo-local-authentication": "~15.0.0",
