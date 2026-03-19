@@ -90,7 +90,7 @@ async function processExecution(jobData: {
           nodeId: log.nodeId,
           nodeType: log.nodeType || "unknown",
           status: log.status,
-          input: null,
+          input: undefined,
           output: log.output ? JSON.parse(JSON.stringify(log.output)) : null,
           durationMs: log.duration,
           error: log.error || null,

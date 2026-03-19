@@ -1,5 +1,5 @@
 import type { WorkflowDefinition, WorkflowNode, ExecutionLogEntry } from "@autoact/types";
-import { nodeRegistry, getNativeNodeHandler } from "./nodes";
+import { type NodeHandler, nodeRegistry, getNativeNodeHandler } from "./nodes";
 
 export interface ExecutorOptions {
   timeoutMs?: number;
@@ -165,9 +165,9 @@ export class GraphExecutor {
         return null;
       }
 
-      let handler = nodeRegistry[node.type];
+      let handler: NodeHandler | undefined = nodeRegistry[node.type];
       if (!handler && node.type === "native") {
-        handler = await getNativeNodeHandler(node.config) ?? undefined;
+        handler = (await getNativeNodeHandler(node.config)) ?? undefined;
       }
       if (!handler) {
         logs.push({

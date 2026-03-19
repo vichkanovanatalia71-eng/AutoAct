@@ -327,7 +327,8 @@ export async function authRoutes(app: FastifyInstance) {
 
     // Generate otpauth URL
     const encodedEmail = encodeURIComponent(user.email);
-    const qrCodeUrl = `otpauth://totp/AutoAct:${encodedEmail}?secret=${Buffer.from(secret, "hex").toString("base32")}&issuer=AutoAct`;
+    const secretBase32 = Buffer.from(secret, "hex").toString("base64url").replace(/=/g, "").toUpperCase();
+    const qrCodeUrl = `otpauth://totp/AutoAct:${encodedEmail}?secret=${secretBase32}&issuer=AutoAct`;
 
     return reply.send({ secret, qrCodeUrl });
   });

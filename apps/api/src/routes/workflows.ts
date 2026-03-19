@@ -269,7 +269,7 @@ export async function workflowRoutes(app: FastifyInstance) {
       const triggerConfig = workflow.triggerConfig as { type?: string; cron?: string } | null;
       const triggerType = triggerConfig?.type || workflow.template.triggerType;
 
-      await resumeTrigger(id, triggerType, triggerConfig || undefined);
+      await resumeTrigger(id, triggerType, triggerConfig?.type ? triggerConfig as { type: string; cron?: string } : undefined);
 
       const updated = await app.prisma.userWorkflow.update({
         where: { id },

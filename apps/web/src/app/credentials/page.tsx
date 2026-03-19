@@ -77,7 +77,16 @@ export default function CredentialsPage() {
   function loadCredentials() {
     if (!user) return;
     getCredentials()
-      .then((data) => setCredentials(data as Credential[]))
+      .then((data) =>
+        setCredentials(
+          (data as Array<Record<string, string>>).map((cr) => ({
+            id: cr.id,
+            name: cr.name,
+            service: cr.serviceType || cr.service,
+            createdAt: cr.createdAt,
+          })) as Credential[]
+        )
+      )
       .catch(() => {})
       .finally(() => setLoading(false));
   }

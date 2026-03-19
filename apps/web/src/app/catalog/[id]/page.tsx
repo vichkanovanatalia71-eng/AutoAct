@@ -78,6 +78,7 @@ interface Credential {
   id: string;
   name: string;
   service: string;
+  serviceType?: string;
 }
 
 const triggerLabels: Record<string, string> = {
@@ -127,10 +128,15 @@ export default function TemplateDetailPage() {
             (tmpl.definition as { nodes?: TemplateNode[] })?.nodes ||
             [];
           setTemplate({ ...(tmpl as unknown as Template), nodes });
-          setWorkflowName(tmpl.name as string);
         }
         if (c.status === "fulfilled")
-          setCredentials(c.value as Credential[]);
+          setCredentials(
+            (c.value as Array<Record<string, string>>).map((cr) => ({
+              id: cr.id,
+              name: cr.name,
+              service: cr.serviceType || cr.service,
+            })) as Credential[]
+          );
       } catch {
         // handle error
       } finally {
