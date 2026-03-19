@@ -34,49 +34,6 @@ export async function workflowRoutes(app: FastifyInstance) {
     );
   });
 
-  app.post<{ Body: ActivateWorkflowRequest }>(
-    "/workflows",
-    { preHandler: [authenticate] },
-    async (request, reply) => {
-      const { userId } = request.user;
-      const { templateId, credentialMapping, triggerConfig } = request.body;
-
-      if (!templateId || !credentialMapping) {
-        return reply.status(400).send({ error: "templateId and credentialMapping are required" });
-      }
-
-      const template = await app.prisma.workflowTemplate.findUnique({
-        where: { id: templateId },
-      });
-
-      if (!template) {
-        return reply.status(404).send({ error: "Template not found" });
-      }
-
-      await checkWorkflowLimit(userId, app.prisma);
-
-      const workflow = await app.prisma.userWorkflow.create({
-        data: {
-          userId,
-          templateId,
-          status: "active",
-          credentialMapping,
-          triggerConfig: triggerConfig ? (triggerConfig as Prisma.InputJsonValue) : Prisma.JsonNull,
-          templateVersion: template.version,
-        },
-      });
-
-      return reply.status(201).send({
-        id: workflow.id,
-        templateId: workflow.templateId,
-        templateName: template.name,
-        status: workflow.status,
-        createdAt: workflow.createdAt.toISOString(),
-        executionCount: 0,
-      });
-    }
-  );
-
   // ---- Get Single Workflow ----
   app.get<{ Params: { id: string } }>(
     "/workflows/:id",
@@ -269,7 +226,18 @@ export async function workflowRoutes(app: FastifyInstance) {
       const triggerConfig = workflow.triggerConfig as { type?: string; cron?: string } | null;
       const triggerType = triggerConfig?.type || workflow.template.triggerType;
 
-      await resumeTrigger(id, triggerType, triggerConfig?.type ? triggerConfig as { type: string; cron?: string } : undefined);
+      // Ensure cron expression is available for resume
+      const effectiveTriggerConfig = triggerConfig?.cron
+        ? triggerConfig as { type: string; cron: string }
+        : undefined;
+
+      if (triggerType === "cron" && !effectiveTriggerConfig?.cron) {
+        return reply.status(400).send({
+          error: "Cannot resume cron workflow: cron expression is missing. Please reconfigure the trigger.",
+        });
+      }
+
+      await resumeTrigger(id, triggerType, effectiveTriggerConfig);
 
       const updated = await app.prisma.userWorkflow.update({
         where: { id },
@@ -280,6 +248,7 @@ export async function workflowRoutes(app: FastifyInstance) {
     }
   );
 
+  // ---- Update Workflow Status (with trigger management) ----
   app.patch<{ Params: { id: string }; Body: { status: string } }>(
     "/workflows/:id/status",
     { preHandler: [authenticate] },
@@ -294,6 +263,7 @@ export async function workflowRoutes(app: FastifyInstance) {
 
       const workflow = await app.prisma.userWorkflow.findUnique({
         where: { id },
+        include: { template: true },
       });
 
       if (!workflow) {
@@ -302,6 +272,19 @@ export async function workflowRoutes(app: FastifyInstance) {
 
       if (workflow.userId !== userId) {
         return reply.status(403).send({ error: "Forbidden" });
+      }
+
+      const triggerConfig = workflow.triggerConfig as { type?: string; cron?: string } | null;
+      const triggerType = triggerConfig?.type || workflow.template.triggerType;
+
+      // Manage triggers when status changes
+      if (status === "paused" && workflow.status !== "paused") {
+        await pauseTrigger(id, triggerType);
+      } else if (status === "active" && workflow.status !== "active") {
+        const effectiveTriggerConfig = triggerConfig?.cron
+          ? triggerConfig as { type: string; cron: string }
+          : undefined;
+        await resumeTrigger(id, triggerType, effectiveTriggerConfig);
       }
 
       const updated = await app.prisma.userWorkflow.update({
@@ -324,6 +307,7 @@ export async function workflowRoutes(app: FastifyInstance) {
     }
   );
 
+  // ---- Delete Workflow (with trigger cleanup) ----
   app.delete<{ Params: { id: string } }>(
     "/workflows/:id",
     { preHandler: [authenticate] },
@@ -333,6 +317,7 @@ export async function workflowRoutes(app: FastifyInstance) {
 
       const workflow = await app.prisma.userWorkflow.findUnique({
         where: { id },
+        include: { template: { select: { triggerType: true } } },
       });
 
       if (!workflow) {
@@ -342,6 +327,11 @@ export async function workflowRoutes(app: FastifyInstance) {
       if (workflow.userId !== userId) {
         return reply.status(403).send({ error: "Forbidden" });
       }
+
+      // Remove cron trigger before deleting
+      const triggerConfig = workflow.triggerConfig as { type?: string } | null;
+      const triggerType = triggerConfig?.type || workflow.template.triggerType;
+      await removeTrigger(id, triggerType);
 
       await app.prisma.userWorkflow.delete({ where: { id } });
 

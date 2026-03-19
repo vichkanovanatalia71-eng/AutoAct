@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@autoact/db";
 import type { CredentialMappingEntry } from "@autoact/types";
+import { randomBytes } from "node:crypto";
 import { checkWorkflowLimit } from "../utils/limits.js";
 import { getWorkflowQueue } from "../utils/queue.js";
 import { setupTrigger } from "./trigger.service.js";
@@ -159,6 +160,9 @@ export async function activateWorkflow(
   // Determine trigger type
   const effectiveTriggerType = triggerConfig?.type || template.triggerType;
 
+  // Generate webhook secret for signature verification
+  const webhookSecret = randomBytes(32).toString("hex");
+
   // Create UserWorkflow
   const workflow = await prisma.userWorkflow.create({
     data: {
@@ -170,7 +174,14 @@ export async function activateWorkflow(
         ? (triggerConfig as any)
         : { type: effectiveTriggerType },
       templateVersion: template.version,
+      webhookSecret,
     },
+  });
+
+  // Increment template activations count
+  await prisma.workflowTemplate.update({
+    where: { id: templateId },
+    data: { activationsCount: { increment: 1 } },
   });
 
   // Setup trigger (cron repeatable job, webhook is automatic)

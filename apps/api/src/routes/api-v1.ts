@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 
-async function authenticateApiKey(request: any, reply: any): Promise<void> {
+async function authenticateApiKey(request: any, reply: any, requiredScopes?: string[]): Promise<void> {
   const authHeader = request.headers.authorization;
   if (!authHeader?.startsWith("Bearer ak_")) {
     // Fall back to JWT
@@ -20,12 +20,24 @@ async function authenticateApiKey(request: any, reply: any): Promise<void> {
     return reply.status(401).send({ error: "Invalid or expired API key" });
   }
 
+  // Enforce scopes if API key has scopes defined and operation requires specific scopes
+  if (requiredScopes && requiredScopes.length > 0 && apiKey.scopes && apiKey.scopes.length > 0) {
+    const hasScope = requiredScopes.some((scope) => apiKey.scopes.includes(scope) || apiKey.scopes.includes("*"));
+    if (!hasScope) {
+      return reply.status(403).send({ error: `Insufficient API key scopes. Required: ${requiredScopes.join(" or ")}` });
+    }
+  }
+
   request.user = { userId: apiKey.userId, email: "" };
+}
+
+function withScopes(...scopes: string[]) {
+  return async (request: any, reply: any) => authenticateApiKey(request, reply, scopes);
 }
 
 export async function apiV1Routes(app: FastifyInstance) {
   // List workflows
-  app.get("/api/v1/workflows", { preHandler: [authenticateApiKey] }, async (request, reply) => {
+  app.get("/api/v1/workflows", { preHandler: [withScopes("workflows:read", "workflows:write", "*")] }, async (request, reply) => {
     const { userId } = request.user;
 
     const workflows = await app.prisma.userWorkflow.findMany({
@@ -48,7 +60,7 @@ export async function apiV1Routes(app: FastifyInstance) {
   // Trigger workflow execution
   app.post<{ Params: { id: string } }>(
     "/api/v1/workflows/:id/execute",
-    { preHandler: [authenticateApiKey] },
+    { preHandler: [withScopes("workflows:execute", "workflows:write", "*")] },
     async (request, reply) => {
       const { userId } = request.user;
       const { id } = request.params;
@@ -92,7 +104,7 @@ export async function apiV1Routes(app: FastifyInstance) {
   // Get execution status
   app.get<{ Params: { id: string } }>(
     "/api/v1/executions/:id",
-    { preHandler: [authenticateApiKey] },
+    { preHandler: [withScopes("executions:read", "workflows:read", "*")] },
     async (request, reply) => {
       const { userId } = request.user;
       const { id } = request.params;
@@ -122,7 +134,7 @@ export async function apiV1Routes(app: FastifyInstance) {
   // List executions for a workflow
   app.get<{ Params: { id: string }; Querystring: { page?: string; pageSize?: string } }>(
     "/api/v1/workflows/:id/executions",
-    { preHandler: [authenticateApiKey] },
+    { preHandler: [withScopes("executions:read", "workflows:read", "*")] },
     async (request, reply) => {
       const { userId } = request.user;
       const { id } = request.params;

@@ -107,6 +107,24 @@ export async function syncTemplate(templateId: string): Promise<{
     });
 
     if ((diff as any).hasBreakingChanges) {
+      // Find affected workflows to remove their cron triggers
+      const workflowsToPause = await prisma.userWorkflow.findMany({
+        where: {
+          templateId,
+          templateVersion: { lt: newVersion },
+          status: "active",
+        },
+        include: { template: { select: { triggerType: true } } },
+      });
+
+      // Remove cron triggers for affected workflows
+      const { pauseTrigger } = await import("../services/trigger.service.js");
+      for (const wf of workflowsToPause) {
+        const triggerConfig = wf.triggerConfig as { type?: string } | null;
+        const triggerType = triggerConfig?.type || wf.template.triggerType;
+        await pauseTrigger(wf.id, triggerType);
+      }
+
       await prisma.userWorkflow.updateMany({
         where: {
           templateId,
@@ -117,6 +135,24 @@ export async function syncTemplate(templateId: string): Promise<{
           status: "paused",
         },
       });
+
+      // Notify affected users
+      const { getNotifyQueue } = await import("./notify.worker.js");
+      try {
+        const notifyQueue = getNotifyQueue();
+        const affectedUserIds = [...new Set(workflowsToPause.map((wf) => wf.userId))];
+        for (const uid of affectedUserIds) {
+          await notifyQueue.add("notification", {
+            userId: uid,
+            type: "workflow_needs_attention",
+            title: "Workflow paused — template updated",
+            body: `Template "${template!.name}" has breaking changes. Your workflow(s) were paused and need reconfiguration.`,
+            data: { templateId },
+          });
+        }
+      } catch {
+        // Non-critical
+      }
     } else {
       await prisma.userWorkflow.updateMany({
         where: {

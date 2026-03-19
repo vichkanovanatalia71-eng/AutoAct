@@ -22,8 +22,11 @@ export async function settingsRoutes(app: FastifyInstance) {
 
       const updateData: Record<string, unknown> = {};
       if (email) {
+        // Email change requires verification — set new email and clear verification
         updateData.email = email;
         updateData.emailVerifiedAt = null;
+        // TODO: Send verification email to the new address before actually changing
+        // For now, immediately update but require re-verification
       }
       if (timezone !== undefined) {
         updateData.timezone = timezone;
@@ -141,10 +144,51 @@ export async function settingsRoutes(app: FastifyInstance) {
     });
   });
 
-  // Delete account (soft delete)
+  // Delete account (soft delete with full cleanup)
   app.delete("/settings/account", { preHandler: [authenticate] }, async (request, reply) => {
     const { userId } = request.user;
+    const { removeTrigger } = await import("../services/trigger.service.js");
 
+    // 1. Pause all workflows and remove cron triggers
+    const workflows = await app.prisma.userWorkflow.findMany({
+      where: { userId },
+      include: { template: { select: { triggerType: true } } },
+    });
+
+    for (const wf of workflows) {
+      const triggerConfig = wf.triggerConfig as { type?: string } | null;
+      const triggerType = triggerConfig?.type || wf.template.triggerType;
+      await removeTrigger(wf.id, triggerType);
+    }
+
+    await app.prisma.userWorkflow.updateMany({
+      where: { userId },
+      data: { status: "paused" },
+    });
+
+    // 2. Revoke all sessions
+    await app.prisma.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    // 3. Cancel Stripe subscription if exists
+    const user = await app.prisma.user.findUnique({
+      where: { id: userId },
+      include: { subscription: true },
+    });
+
+    if (user?.subscription?.stripeSubscriptionId && process.env.STRIPE_SECRET_KEY) {
+      try {
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        await stripe.subscriptions.cancel(user.subscription.stripeSubscriptionId);
+      } catch {
+        // Non-critical: Stripe will handle expiration
+      }
+    }
+
+    // 4. Soft delete user
     await app.prisma.user.update({
       where: { id: userId },
       data: { deletedAt: new Date() },

@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { authenticate } from "../plugins/auth.js";
 import { PlanType, PLAN_LIMITS } from "@autoact/types";
+import { pauseTrigger } from "../services/trigger.service.js";
+
+const UNLIMITED_WORKFLOWS = 999999;
 
 export async function billingRoutes(app: FastifyInstance) {
   // Get billing usage
@@ -56,6 +59,17 @@ export async function billingRoutes(app: FastifyInstance) {
 
       if (!plan || !Object.values(PlanType).includes(plan as PlanType)) {
         return reply.status(400).send({ error: "Invalid plan" });
+      }
+
+      // Prevent checkout for FREE plan or same plan
+      const currentSub = await app.prisma.subscription.findUnique({ where: { userId } });
+      const currentPlan = (currentSub?.plan ?? PlanType.FREE) as PlanType;
+
+      if (plan === PlanType.FREE) {
+        return reply.status(400).send({ error: "Cannot checkout for FREE plan. Use billing portal to cancel subscription." });
+      }
+      if (plan === currentPlan && currentSub?.status === "active") {
+        return reply.status(400).send({ error: "You are already on this plan" });
       }
 
       const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -147,6 +161,24 @@ export async function billingRoutes(app: FastifyInstance) {
     },
   );
 
+  // Configure raw body parsing for Stripe webhooks
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    function (req, body, done) {
+      // Store raw body for webhook verification
+      if (req.url === "/billing/webhook") {
+        done(null, body);
+      } else {
+        try {
+          done(null, JSON.parse(body as string));
+        } catch (err: any) {
+          done(err, undefined);
+        }
+      }
+    }
+  );
+
   app.post("/billing/webhook", async (request, reply) => {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -162,8 +194,9 @@ export async function billingRoutes(app: FastifyInstance) {
     let event;
 
     try {
+      // request.body is raw string for this route (see content type parser above)
       event = stripe.webhooks.constructEvent(
-        (request.body as string) || "",
+        request.body as string,
         signature,
         webhookSecret,
       );
@@ -185,7 +218,7 @@ export async function billingRoutes(app: FastifyInstance) {
               status: "active",
               stripeSubscriptionId: session.subscription,
               executionsLimit: PLAN_LIMITS[planType].executionsPerMonth,
-              workflowsLimit: planType === PlanType.BUSINESS ? 999999 : PLAN_LIMITS[planType].workflows,
+              workflowsLimit: planType === PlanType.BUSINESS ? UNLIMITED_WORKFLOWS : PLAN_LIMITS[planType].workflows,
             },
             create: {
               userId,
@@ -193,7 +226,7 @@ export async function billingRoutes(app: FastifyInstance) {
               status: "active",
               stripeSubscriptionId: session.subscription,
               executionsLimit: PLAN_LIMITS[planType].executionsPerMonth,
-              workflowsLimit: planType === PlanType.BUSINESS ? 999999 : PLAN_LIMITS[planType].workflows,
+              workflowsLimit: planType === PlanType.BUSINESS ? UNLIMITED_WORKFLOWS : PLAN_LIMITS[planType].workflows,
             },
           });
 
@@ -248,6 +281,76 @@ export async function billingRoutes(app: FastifyInstance) {
             where: { id: existing.userId },
             data: { plan: PlanType.FREE },
           });
+
+          // Pause excess workflows beyond FREE plan limit
+          const activeWorkflows = await app.prisma.userWorkflow.findMany({
+            where: { userId: existing.userId, status: "active" },
+            orderBy: { createdAt: "desc" },
+            include: { template: { select: { triggerType: true } } },
+          });
+
+          const freeLimit = PLAN_LIMITS[PlanType.FREE].workflows;
+          if (activeWorkflows.length > freeLimit) {
+            const toPause = activeWorkflows.slice(freeLimit);
+            for (const wf of toPause) {
+              const triggerConfig = wf.triggerConfig as { type?: string } | null;
+              const triggerType = triggerConfig?.type || wf.template.triggerType;
+              await pauseTrigger(wf.id, triggerType);
+
+              await app.prisma.userWorkflow.update({
+                where: { id: wf.id },
+                data: { status: "paused" },
+              });
+            }
+          }
+        }
+        break;
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object as any;
+        if (invoice.customer) {
+          const user = await app.prisma.user.findFirst({
+            where: { stripeCustomerId: invoice.customer },
+          });
+          if (user) {
+            await app.prisma.billingInvoice.create({
+              data: {
+                userId: user.id,
+                stripeInvoiceId: invoice.id,
+                amount: invoice.amount_paid || 0,
+                status: "paid",
+                description: invoice.description || `Invoice ${invoice.number}`,
+                invoiceUrl: invoice.hosted_invoice_url || null,
+                periodStart: invoice.period_start ? new Date(invoice.period_start * 1000) : new Date(),
+                periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : new Date(),
+              },
+            });
+          }
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as any;
+        if (invoice.customer) {
+          const user = await app.prisma.user.findFirst({
+            where: { stripeCustomerId: invoice.customer },
+          });
+          if (user) {
+            await app.prisma.billingInvoice.create({
+              data: {
+                userId: user.id,
+                stripeInvoiceId: invoice.id,
+                amount: invoice.amount_due || 0,
+                status: "failed",
+                description: invoice.description || `Invoice ${invoice.number}`,
+                invoiceUrl: invoice.hosted_invoice_url || null,
+                periodStart: invoice.period_start ? new Date(invoice.period_start * 1000) : new Date(),
+                periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : new Date(),
+              },
+            });
+          }
         }
         break;
       }

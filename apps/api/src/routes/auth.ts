@@ -6,8 +6,63 @@ import type { RegisterRequest, LoginRequest } from "@autoact/types";
 import { PlanType, PLAN_LIMITS } from "@autoact/types";
 import { createAuditLog } from "../services/audit.service.js";
 
-// In-memory token store for password reset / email verification (use Redis in production)
-const tokenStore = new Map<string, { userId: string; expiresAt: number; type: string }>();
+// Redis-backed token store with in-memory fallback
+import IORedis from "ioredis";
+
+let redisClient: IORedis | null = null;
+
+function getRedisClient(): IORedis | null {
+  if (redisClient) return redisClient;
+  try {
+    redisClient = new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
+      maxRetriesPerRequest: 1,
+      lazyConnect: false,
+    });
+    redisClient.on("error", () => {
+      redisClient?.disconnect();
+      redisClient = null;
+    });
+    return redisClient;
+  } catch {
+    return null;
+  }
+}
+
+// Fallback in-memory store (only used when Redis is unavailable)
+const memoryTokenStore = new Map<string, { userId: string; expiresAt: number; type: string }>();
+
+async function storeToken(token: string, data: { userId: string; expiresAt: number; type: string }): Promise<void> {
+  const redis = getRedisClient();
+  if (redis) {
+    const ttlSeconds = Math.ceil((data.expiresAt - Date.now()) / 1000);
+    await redis.set(`token:${token}`, JSON.stringify(data), "EX", ttlSeconds);
+  } else {
+    memoryTokenStore.set(token, data);
+  }
+}
+
+async function getToken(token: string): Promise<{ userId: string; expiresAt: number; type: string } | null> {
+  const redis = getRedisClient();
+  if (redis) {
+    const raw = await redis.get(`token:${token}`);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (Date.now() > data.expiresAt) return null;
+    return data;
+  }
+  const data = memoryTokenStore.get(token);
+  if (!data || Date.now() > data.expiresAt) return null;
+  return data;
+}
+
+async function deleteToken(token: string): Promise<void> {
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.del(`token:${token}`);
+  } else {
+    memoryTokenStore.delete(token);
+  }
+}
 
 function generateToken(): string {
   return randomBytes(32).toString("hex");
@@ -39,6 +94,9 @@ function verifyTOTP(secret: string, code: string): boolean {
   }
   return false;
 }
+
+const ACCESS_TOKEN_EXPIRY = "15m";
+const REFRESH_TOKEN_EXPIRY = "7d";
 
 export async function authRoutes(app: FastifyInstance) {
   app.post<{ Body: RegisterRequest }>("/auth/register", async (request, reply) => {
@@ -86,7 +144,26 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
 
-    const token = app.jwt.sign({ userId: user.id, email: user.email });
+    // Create session
+    const session = await app.prisma.session.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash: randomBytes(32).toString("hex"),
+        deviceName: request.headers["user-agent"]?.slice(0, 100) || "Unknown",
+        ipAddress: request.ip,
+        userAgent: request.headers["user-agent"]?.slice(0, 500) || null,
+        lastActiveAt: new Date(),
+      },
+    });
+
+    const token = app.jwt.sign(
+      { userId: user.id, email: user.email, sessionId: session.id },
+      { expiresIn: ACCESS_TOKEN_EXPIRY }
+    );
+    const refreshToken = app.jwt.sign(
+      { userId: user.id, email: user.email, sessionId: session.id },
+      { expiresIn: REFRESH_TOKEN_EXPIRY }
+    );
 
     await createAuditLog({
       userId: user.id,
@@ -98,6 +175,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return reply.status(201).send({
       token,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,
@@ -149,7 +227,26 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
 
-    const token = app.jwt.sign({ userId: user.id, email: user.email });
+    // Create session
+    const session = await app.prisma.session.create({
+      data: {
+        userId: user.id,
+        refreshTokenHash: randomBytes(32).toString("hex"),
+        deviceName: request.headers["user-agent"]?.slice(0, 100) || "Unknown",
+        ipAddress: request.ip,
+        userAgent: request.headers["user-agent"]?.slice(0, 500) || null,
+        lastActiveAt: new Date(),
+      },
+    });
+
+    const token = app.jwt.sign(
+      { userId: user.id, email: user.email, sessionId: session.id },
+      { expiresIn: ACCESS_TOKEN_EXPIRY }
+    );
+    const refreshToken = app.jwt.sign(
+      { userId: user.id, email: user.email, sessionId: session.id },
+      { expiresIn: REFRESH_TOKEN_EXPIRY }
+    );
 
     await createAuditLog({
       userId: user.id,
@@ -161,6 +258,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return reply.send({
       token,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,
@@ -214,8 +312,16 @@ export async function authRoutes(app: FastifyInstance) {
     });
   });
 
-  // Logout (client-side token invalidation — server acknowledges)
+  // Logout — revoke session
   app.post("/auth/logout", { preHandler: [authenticate] }, async (request, reply) => {
+    // Revoke the current session
+    if (request.user.sessionId) {
+      await app.prisma.session.update({
+        where: { id: request.user.sessionId },
+        data: { revokedAt: new Date() },
+      }).catch(() => {});
+    }
+
     await createAuditLog({
       userId: request.user.userId,
       action: "user_logout",
@@ -226,11 +332,54 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ message: "Logged out successfully" });
   });
 
-  // Refresh token
-  app.post("/auth/refresh", { preHandler: [authenticate] }, async (request, reply) => {
-    const { userId, email } = request.user;
-    const token = app.jwt.sign({ userId, email });
-    return reply.send({ token });
+  // Refresh token — issue new access token from refresh token
+  app.post<{ Body: { refreshToken?: string } }>("/auth/refresh", async (request, reply) => {
+    const { refreshToken } = request.body || {};
+
+    // Support both: refreshToken in body, or current JWT in Authorization header
+    if (refreshToken) {
+      try {
+        const decoded = app.jwt.verify<{ userId: string; email: string; sessionId?: string }>(refreshToken);
+
+        // Check session validity
+        if (decoded.sessionId) {
+          const session = await app.prisma.session.findUnique({
+            where: { id: decoded.sessionId },
+            select: { revokedAt: true },
+          });
+          if (!session || session.revokedAt) {
+            return reply.status(401).send({ error: "Session has been revoked" });
+          }
+        }
+
+        // Check user still exists
+        const user = await app.prisma.user.findUnique({
+          where: { id: decoded.userId },
+          select: { id: true, email: true, deletedAt: true },
+        });
+        if (!user || user.deletedAt) {
+          return reply.status(401).send({ error: "Account not found" });
+        }
+
+        const newToken = app.jwt.sign(
+          { userId: decoded.userId, email: decoded.email, sessionId: decoded.sessionId },
+          { expiresIn: ACCESS_TOKEN_EXPIRY }
+        );
+        return reply.send({ token: newToken });
+      } catch {
+        return reply.status(401).send({ error: "Invalid or expired refresh token" });
+      }
+    }
+
+    // Fallback: re-sign from current JWT (backward compatibility)
+    try {
+      await request.jwtVerify();
+      const { userId, email, sessionId } = request.user;
+      const token = app.jwt.sign({ userId, email, sessionId }, { expiresIn: ACCESS_TOKEN_EXPIRY });
+      return reply.send({ token });
+    } catch {
+      return reply.status(401).send({ error: "Unauthorized" });
+    }
   });
 
   // Forgot password
@@ -243,7 +392,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) return reply.send({ message: "If the email exists, a reset link has been sent" });
 
     const token = generateToken();
-    tokenStore.set(token, { userId: user.id, expiresAt: Date.now() + 3600_000, type: "password_reset" });
+    await storeToken(token, { userId: user.id, expiresAt: Date.now() + 3600_000, type: "password_reset" });
 
     // In production, send email with reset link
     console.log(`[auth] Password reset token for ${email}: ${token}`);
@@ -258,14 +407,20 @@ export async function authRoutes(app: FastifyInstance) {
 
     if (password.length < 8) return reply.status(400).send({ error: "Password must be at least 8 characters" });
 
-    const stored = tokenStore.get(token);
-    if (!stored || stored.type !== "password_reset" || Date.now() > stored.expiresAt) {
+    const stored = await getToken(token);
+    if (!stored || stored.type !== "password_reset") {
       return reply.status(400).send({ error: "Invalid or expired token" });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
     await app.prisma.user.update({ where: { id: stored.userId }, data: { passwordHash } });
-    tokenStore.delete(token);
+    await deleteToken(token);
+
+    // Revoke all sessions on password reset
+    await app.prisma.session.updateMany({
+      where: { userId: stored.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
 
     await createAuditLog({
       userId: stored.userId,
@@ -283,8 +438,8 @@ export async function authRoutes(app: FastifyInstance) {
     const { token } = request.body;
     if (!token) return reply.status(400).send({ error: "Token is required" });
 
-    const stored = tokenStore.get(token);
-    if (!stored || stored.type !== "email_verify" || Date.now() > stored.expiresAt) {
+    const stored = await getToken(token);
+    if (!stored || stored.type !== "email_verify") {
       return reply.status(400).send({ error: "Invalid or expired token" });
     }
 
@@ -292,7 +447,7 @@ export async function authRoutes(app: FastifyInstance) {
       where: { id: stored.userId },
       data: { emailVerifiedAt: new Date() },
     });
-    tokenStore.delete(token);
+    await deleteToken(token);
 
     return reply.send({ message: "Email verified successfully" });
   });
@@ -305,7 +460,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (user.emailVerifiedAt) return reply.send({ message: "Email already verified" });
 
     const token = generateToken();
-    tokenStore.set(token, { userId, expiresAt: Date.now() + 86400_000, type: "email_verify" });
+    await storeToken(token, { userId, expiresAt: Date.now() + 86400_000, type: "email_verify" });
 
     console.log(`[auth] Email verification token for ${user.email}: ${token}`);
 

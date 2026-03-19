@@ -94,6 +94,28 @@ export async function credentialRoutes(app: FastifyInstance) {
         return reply.status(403).send({ error: "Forbidden" });
       }
 
+      // Check if any active workflows depend on this credential
+      const dependentWorkflows = await app.prisma.userWorkflow.findMany({
+        where: {
+          userId,
+          status: { in: ["active", "testing"] },
+        },
+        select: { id: true, credentialMapping: true, template: { select: { name: true } } },
+      });
+
+      const affectedWorkflows = dependentWorkflows.filter((wf) => {
+        const mapping = wf.credentialMapping as Record<string, unknown>;
+        return Object.values(mapping).some((v) => v === id || (typeof v === "object" && v !== null && (v as any).credential_id === id));
+      });
+
+      if (affectedWorkflows.length > 0) {
+        const names = affectedWorkflows.map((w) => w.template.name).join(", ");
+        return reply.status(409).send({
+          error: `This credential is used by active workflows: ${names}. Pause or reconfigure them first.`,
+          affectedWorkflows: affectedWorkflows.map((w) => w.id),
+        });
+      }
+
       await app.prisma.credential.delete({ where: { id } });
 
       return reply.status(204).send();

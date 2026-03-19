@@ -7,6 +7,21 @@ export async function checkWorkflowLimit(userId: string, prisma: PrismaClient): 
   });
 
   const plan = (subscription?.plan ?? PlanType.FREE) as PlanType;
+
+  // Block operations for canceled or past_due subscriptions (except FREE plan)
+  if (subscription && plan !== PlanType.FREE) {
+    if (subscription.status === "canceled") {
+      const error = new Error("Your subscription has been canceled. Please resubscribe to create workflows.");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+    if (subscription.status === "past_due") {
+      const error = new Error("Your subscription payment is past due. Please update your payment method.");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+  }
+
   const limit = subscription?.workflowsLimit ?? PLAN_LIMITS[plan].workflows;
 
   const count = await prisma.userWorkflow.count({
@@ -26,6 +41,21 @@ export async function checkExecutionLimit(userId: string, prisma: PrismaClient):
   });
 
   const plan = (subscription?.plan ?? PlanType.FREE) as PlanType;
+
+  // Block operations for canceled or past_due subscriptions (except FREE plan)
+  if (subscription && plan !== PlanType.FREE) {
+    if (subscription.status === "canceled") {
+      const error = new Error("Your subscription has been canceled. Please resubscribe to run workflows.");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+    if (subscription.status === "past_due") {
+      const error = new Error("Your subscription payment is past due. Please update your payment method.");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+  }
+
   const limit = subscription?.executionsLimit ?? PLAN_LIMITS[plan].executionsPerMonth;
 
   const now = new Date();

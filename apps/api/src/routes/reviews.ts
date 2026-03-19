@@ -64,11 +64,21 @@ export async function reviewRoutes(app: FastifyInstance) {
         _avg: { rating: true },
       });
 
+      // Mask email addresses to protect privacy
+      function maskEmail(email: string): string {
+        const [local, domain] = email.split("@");
+        if (!domain) return "***";
+        const masked = local.length > 2
+          ? local[0] + "***" + local[local.length - 1]
+          : "***";
+        return `${masked}@${domain}`;
+      }
+
       return reply.send({
         data: reviews.map((r) => ({
           id: r.id,
           userId: r.userId,
-          userEmail: r.user.email,
+          userEmail: maskEmail(r.user.email),
           rating: r.rating,
           comment: r.comment,
           createdAt: r.createdAt.toISOString(),
